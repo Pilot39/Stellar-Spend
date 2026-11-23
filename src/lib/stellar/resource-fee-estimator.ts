@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger';
-import { Account, Networks, Operation, TransactionBuilder, xdr } from 'stellar-sdk';
+import { Account, Networks, Operation, TransactionBuilder, xdr } from './sdk';
 
 interface ResourceFeeEstimate {
   cpuInstructions: number;

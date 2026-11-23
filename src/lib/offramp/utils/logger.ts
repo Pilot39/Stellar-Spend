@@ -4,6 +4,7 @@
  */
 
 import { logger, redactSensitive } from '@/lib/logger';
+import { randomUuid } from '@/lib/crypto/ids';
 
 export interface RequestLog {
   requestId: string;
@@ -16,78 +17,54 @@ export interface RequestLog {
   errorStack?: string;
 }
 
-/**
- * Generate a unique request ID for tracing
- */
-export function generateRequestId(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+function selectLevel(statusCode?: number): 'error' | 'warn' | 'info' {
+  if (statusCode && statusCode >= 500) return 'error';
+  if (statusCode && statusCode >= 400) return 'warn';
+  return 'info';
 }
 
 /**
- * Log a structured API request via the centralized logger
+ * Generate a unique request ID for tracing.
+ * Uses crypto.randomUUID — the previous hand-rolled v4 generator depended on
+ * Math.random, which is not cryptographically secure (#1371).
  */
-export function logRequest(log: RequestLog): void {
-  const logEntry = {
-    ...log,
-    timestamp: new Date(log.timestamp).toISOString(),
-  };
-
-  const level =
-    log.statusCode && log.statusCode >= 500
-      ? 'error'
-      : log.statusCode && log.statusCode >= 400
-        ? 'warn'
-        : 'info';
-
-  logger.withContext({ requestId: log.requestId })[level]('request.log', redactSensitive(logEntry));
+export function generateRequestId(): string {
+  return randomUuid();
 }
 
 /**
  * Create a request logger middleware.
- * Returns a function that logs request details via the centralized logger.
+ * Thin wrapper over the centralized logger; emits a single structured
+ * `request.log` entry containing requestId, method, path, status and duration.
  */
 export function createRequestLogger(requestId: string, method: string, path: string) {
   const startTime = Date.now();
+  const scoped = logger.withContext({ requestId });
+
+  const emit = (statusCode: number, error?: Error | string) => {
+    const duration = Date.now() - startTime;
+    const entry: RequestLog = {
+      requestId,
+      timestamp: new Date().toISOString(),
+      method,
+      path,
+      statusCode,
+      duration,
+    };
+
+    if (error !== undefined) {
+      entry.error = typeof error === 'string' ? error : error.message;
+      if (error instanceof Error) {
+        entry.errorStack = error.stack;
+      }
+    }
+
+    scoped[selectLevel(statusCode)]('request.log', redactSensitive(entry));
+  };
 
   return {
     requestId,
-    logSuccess: (statusCode: number) => {
-      const duration = Date.now() - startTime;
-      logRequest({
-        requestId,
-        timestamp: new Date().toISOString(),
-        method,
-        path,
-        statusCode,
-        duration,
-      });
-    },
-    logError: (statusCode: number, error: Error | string) => {
-      const duration = Date.now() - startTime;
-      const errorMessage = typeof error === 'string' ? error : error.message;
-      const errorStack = error instanceof Error ? error.stack : undefined;
-
-      logRequest({
-        requestId,
-        timestamp: new Date().toISOString(),
-        method,
-        path,
-        statusCode,
-        duration,
-        error: errorMessage,
-        errorStack,
-      });
-    },
+    logSuccess: (statusCode: number) => emit(statusCode),
+    logError: (statusCode: number, error: Error | string) => emit(statusCode, error),
   };
-}
-
-/**
- * Mask sensitive data in request/response bodies
- */
-export function maskRequestBody(body: unknown): unknown {
-  return redactSensitive(body);
 }

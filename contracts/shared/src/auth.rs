@@ -1,4 +1,4 @@
-use soroban_sdk::{Address, Env, IntoVal, Symbol, Val, Vec};
+use soroban_sdk::{Address, Env, IntoVal, Val, Vec};
 
 use crate::errors::ContractError;
 
@@ -11,71 +11,6 @@ pub enum AuthError {
     NotAdmin = 2,
     InvalidSigner = 3,
     InsufficientPermissions = 4,
-}
-
-pub struct AdminAuth;
-
-impl AdminAuth {
-    pub fn require_admin(env: &Env, admin: &Address, caller: &Address) -> Result<(), AuthError> {
-        if caller != admin {
-            return Err(AuthError::NotAdmin);
-        }
-        caller.require_auth();
-        Ok(())
-    }
-
-    pub fn require_admin_or_role(
-        _env: &Env,
-        _admin: &Address,
-        caller: &Address,
-        role_check: fn(&Address) -> bool,
-    ) -> Result<(), AuthError> {
-        if caller == _admin {
-            caller.require_auth();
-            return Ok(());
-        }
-        if role_check(caller) {
-            caller.require_auth();
-            return Ok(());
-        }
-        Err(AuthError::Unauthorized)
-    }
-
-    pub fn require_role(
-        _env: &Env,
-        caller: &Address,
-        role_check: fn(&Address) -> bool,
-    ) -> Result<(), AuthError> {
-        if !role_check(caller) {
-            return Err(AuthError::InsufficientPermissions);
-        }
-        caller.require_auth();
-        Ok(())
-    }
-
-    pub fn is_admin(env: &Env, admin: &Address, caller: &Address) -> bool {
-        caller == admin
-    }
-}
-
-pub fn assert_is_admin(env: &Env, admin: &Address, admin_key: &str) -> Result<(), ContractError> {
-    let stored_admin: Address = env.storage().instance().get(&Symbol::new(env, admin_key))
-        .ok_or(ContractError::NotFound)?;
-    if admin != &stored_admin {
-        return Err(ContractError::Unauthorized);
-    }
-    admin.require_auth();
-    Ok(())
-}
-
-pub fn assert_is_signer(env: &Env, signer: &Address, signers_key: &str) -> Result<(), ContractError> {
-    let signers: Vec<Address> = env.storage().instance().get(&Symbol::new(env, signers_key))
-        .ok_or(ContractError::NotInitialized)?;
-    if !signers.contains(signer) {
-        return Err(ContractError::Unauthorized);
-    }
-    signer.require_auth();
-    Ok(())
 }
 
 #[cfg(test)]
@@ -142,4 +77,39 @@ where
         .ok_or(ContractError::NotInitialized)?;
     admin.require_auth();
     Ok(admin)
+}
+
+/// Assert that `admin` matches the address stored under `key` in instance storage.
+///
+/// Does not call `require_auth`; callers that need auth should use [`require_admin`].
+/// Reports [`ContractError::NotFound`] when no address is stored under `key`.
+/// Reports [`ContractError::Unauthorized`] when `admin` does not match the stored address.
+pub fn assert_is_admin(env: &Env, admin: &Address, key: &str) -> Result<(), ContractError> {
+    let stored: Address = env
+        .storage()
+        .instance()
+        .get(&soroban_sdk::Symbol::new(env, key))
+        .ok_or(ContractError::NotFound)?;
+    if &stored != admin {
+        return Err(ContractError::Unauthorized);
+    }
+    Ok(())
+}
+
+/// Assert that `signer` appears in the `Vec<Address>` stored under `key` in
+/// instance storage.
+///
+/// Reports [`ContractError::NotInitialized`] when the signer set has not been stored.
+/// Reports [`ContractError::Unauthorized`] when `signer` is not in the set.
+pub fn assert_is_signer(env: &Env, signer: &Address, key: &str) -> Result<(), ContractError> {
+    let signers: Vec<Address> = env
+        .storage()
+        .instance()
+        .get(&soroban_sdk::Symbol::new(env, key))
+        .ok_or(ContractError::NotInitialized)?;
+    if signers.contains(signer) {
+        Ok(())
+    } else {
+        Err(ContractError::Unauthorized)
+    }
 }

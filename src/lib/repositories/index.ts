@@ -12,3 +12,9 @@ export { InMemoryUserRepository } from './implementations/in-memory-user';
 export { InMemoryApiKeyRepository } from './implementations/in-memory-api-key';
 export { InMemoryAuditLogRepository } from './implementations/in-memory-audit-log';
 export { DisputeRepository, disputeRepository } from './dispute-repository';
+export {
+  createRepositoryFactory,
+  createDefaultRepositoryFactory,
+  type RepositoryFactoryOptions,
+  type RepositoryRegistry,
+} from './factory';

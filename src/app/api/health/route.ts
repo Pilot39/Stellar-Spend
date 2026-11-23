@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ErrorHandler } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,68 +25,43 @@ interface HealthStatus {
   timestamp: number;
 }
 
-export async function GET() {
-  // In production, this would check actual services
-  const health: HealthStatus = {
-    status: 'operational',
-    components: [
-      {
-        name: 'API',
-        status: 'operational',
-        responseTime: Math.floor(Math.random() * 100) + 20,
-        lastCheck: Date.now(),
-      },
-      {
-        name: 'Database',
-        status: 'operational',
-        responseTime: Math.floor(Math.random() * 50) + 5,
-        lastCheck: Date.now(),
-      },
-      {
-        name: 'Stellar Network',
-        status: 'operational',
-        responseTime: Math.floor(Math.random() * 300) + 100,
-        lastCheck: Date.now(),
-      },
-      {
-        name: 'Payment Providers',
-        status: 'operational',
-        lastCheck: Date.now(),
-      },
-    ],
-    corridors: [
-      {
-        corridor: 'USDC → NGN',
-        provider: 'Paycrest',
-        status: 'operational',
-        lastTransaction: Date.now() - Math.random() * 600000,
-      },
-      {
-        corridor: 'USDC → KES',
-        provider: 'Paycrest',
-        status: 'operational',
-        lastTransaction: Date.now() - Math.random() * 600000,
-      },
-      {
-        corridor: 'USDC → GHS',
-        provider: 'Paycrest',
-        status: 'operational',
-        lastTransaction: Date.now() - Math.random() * 600000,
-      },
-      {
-        corridor: 'USDC → ZAR',
-        provider: 'Paycrest',
-        status: 'operational',
-        lastTransaction: Date.now() - Math.random() * 600000,
-      },
-    ],
-    uptime: {
-      day: 99.98,
-      week: 99.95,
-      month: 99.87,
-    },
-    timestamp: Date.now(),
-  };
+const CORRIDORS = [
+  { corridor: 'USDC → NGN', provider: 'Paycrest' },
+  { corridor: 'USDC → KES', provider: 'Paycrest' },
+  { corridor: 'USDC → GHS', provider: 'Paycrest' },
+  { corridor: 'USDC → ZAR', provider: 'Paycrest' },
+];
 
-  return NextResponse.json(health);
+export async function GET() {
+  try {
+    const now = Date.now();
+
+    // In production, this would check actual services. Until real probes are
+    // wired up, report deterministic statuses instead of random mock values.
+    const health: HealthStatus = {
+      status: 'operational',
+      components: [
+        { name: 'API', status: 'operational', lastCheck: now },
+        { name: 'Database', status: 'operational', lastCheck: now },
+        { name: 'Stellar Network', status: 'operational', lastCheck: now },
+        { name: 'Payment Providers', status: 'operational', lastCheck: now },
+      ],
+      corridors: CORRIDORS.map(({ corridor, provider }) => ({
+        corridor,
+        provider,
+        status: 'operational',
+        lastTransaction: now,
+      })),
+      uptime: {
+        day: 99.98,
+        week: 99.95,
+        month: 99.87,
+      },
+      timestamp: now,
+    };
+
+    return NextResponse.json(health);
+  } catch (error) {
+    return ErrorHandler.serverError(error);
+  }
 }

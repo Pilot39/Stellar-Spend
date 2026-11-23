@@ -8,6 +8,7 @@ const meta: Meta<typeof Skeleton> = {
   argTypes: {
     width: { control: 'text' },
     height: { control: 'text' },
+    className: { control: 'text' },
   },
 };
 
@@ -34,4 +35,8 @@ export const LargeBlock: Story = {
     width: '100%',
     height: '150px',
   },
+};
+
+export const Default: Story = {
+  args: {},
 };

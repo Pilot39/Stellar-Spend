@@ -36,9 +36,7 @@ function toRoutePath(routeFile) {
     '/' +
     rel
       .split('/')
-      .map((segment) =>
-        segment.startsWith('[') && segment.endsWith(']') ? ':param' : segment,
-      )
+      .map((segment) => (segment.startsWith('[') && segment.endsWith(']') ? ':param' : segment))
       .join('/')
   );
 }
@@ -70,9 +68,64 @@ const undocumented = routes.filter((r) => !documentedPaths.has(r.routePath));
 const routePathSet = new Set(routes.map((r) => r.routePath));
 const staleSpecPaths = [...documentedPaths].filter((p) => !routePathSet.has(p));
 
+// Collect all non-API source files (client code, tests, scripts) so we can grep
+// them for references to a route path. A route with no openapi entry AND no
+// references anywhere is a strong candidate for removal.
+function walkSource(dir, files = []) {
+  if (!fs.existsSync(dir)) return files;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules' || entry.name === '.next') continue;
+      walkSource(full, files);
+    } else if (/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(entry.name)) {
+      files.push(full);
+    }
+  }
+  return files;
+}
+
+const sourceDirs = [
+  path.join(rootDir, 'src'),
+  path.join(rootDir, 'tests'),
+  path.join(rootDir, 'e2e'),
+  path.join(rootDir, 'scripts'),
+].filter((d) => fs.existsSync(d));
+
+const sourceFiles = sourceDirs.flatMap((d) => walkSource(d));
+const sourceContents = sourceFiles.map((file) => ({
+  file,
+  content: fs.readFileSync(file, 'utf8'),
+}));
+
+function isReferenced(routePath) {
+  // Match the literal route path, ignoring dynamic segment names so
+  // `/api/foo/:param` matches `/api/foo/123` or `/api/foo/${id}`.
+  const segments = routePath.split('/').filter(Boolean);
+  const pattern = segments
+    .map((seg) => (seg === ':param' ? '[^/`\'"\\s]+' : seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    .join('/');
+  const re = new RegExp(`/${pattern}(?![\\w-])`);
+  return sourceContents.some(
+    ({ file, content }) => !file.includes(path.join('src', 'app', 'api')) && re.test(content),
+  );
+}
+
+const candidatesForRemoval = undocumented
+  .filter((r) => !isReferenced(r.routePath))
+  .map((r) => ({
+    routePath: r.routePath,
+    file: r.file,
+    methods: r.methods,
+  }));
+
 if (process.argv.includes('--json')) {
   console.log(
-    JSON.stringify({ totalRoutes: routes.length, undocumented, staleSpecPaths }, null, 2),
+    JSON.stringify(
+      { totalRoutes: routes.length, undocumented, staleSpecPaths, candidatesForRemoval },
+      null,
+      2,
+    ),
   );
   process.exit(0);
 }
@@ -90,7 +143,9 @@ if (undocumented.length > 0) {
       '  webhooks, admin tooling) before treating any of these as dead code:\n',
   );
   for (const r of undocumented) {
-    console.log(`  ${r.routePath.padEnd(50)} [${r.methods.join(', ') || 'no exported method'}]  ${r.file}`);
+    console.log(
+      `  ${r.routePath.padEnd(50)} [${r.methods.join(', ') || 'no exported method'}]  ${r.file}`,
+    );
   }
   console.log('');
 } else {
@@ -107,6 +162,22 @@ if (staleSpecPaths.length > 0) {
   console.log('');
 } else {
   console.log('✔ No openapi.yaml paths are missing a backing route file.\n');
+}
+
+if (candidatesForRemoval.length > 0) {
+  console.log(
+    `⚠ ${candidatesForRemoval.length} route(s) are undocumented AND unreferenced in src/, tests/, e2e/ or scripts/.\n` +
+      '  These are candidates for removal (#1456) — confirm no external consumers\n' +
+      '  (cron, webhooks, admin tooling, third-party clients) before deleting:\n',
+  );
+  for (const r of candidatesForRemoval) {
+    console.log(
+      `  ${r.routePath.padEnd(50)} [${r.methods.join(', ') || 'no exported method'}]  ${r.file}`,
+    );
+  }
+  console.log('');
+} else {
+  console.log('✔ No undocumented-and-unreferenced routes found.\n');
 }
 
 process.exit(0);

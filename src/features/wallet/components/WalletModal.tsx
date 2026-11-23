@@ -3,11 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { useFocusTrap, useFocusRestore } from '@/hooks/useFocusTrap';
-import {
-  type WalletModalProps,
-  type WalletOption,
-} from './modal/types';
-import { WalletOptionButton } from './modal/WalletOptionButton';
+import { type WalletModalProps, type WalletOption } from './modal/types';
+import { WalletConnectorList } from './modal/WalletConnectorList';
 import { WalletModalHeader } from './modal/WalletModalHeader';
 import { WalletModalError } from './modal/WalletModalError';
 
@@ -110,18 +107,13 @@ export function WalletModal({
       <div className="relative w-full max-w-sm mx-4 bg-[#111111] border border-[#333333] shadow-2xl">
         <WalletModalHeader isConnecting={isConnecting} onClose={onClose} />
 
-        <div className="p-4 flex flex-col gap-3">
-          {WALLET_OPTIONS.map((wallet, i) => (
-            <WalletOptionButton
-              key={wallet.type}
-              ref={i === 0 ? firstButtonRef : undefined}
-              wallet={wallet}
-              isConnecting={isConnecting}
-              connectingWallet={connectingWallet}
-              onConnect={onConnect}
-            />
-          ))}
-        </div>
+        <WalletConnectorList
+          wallets={WALLET_OPTIONS}
+          firstButtonRef={firstButtonRef}
+          isConnecting={isConnecting}
+          connectingWallet={connectingWallet}
+          onConnect={onConnect}
+        />
 
         {error && !dismissed && (
           <WalletModalError error={error} onDismiss={() => setDismissed(true)} />
@@ -151,5 +143,3 @@ export function WalletModal({
     </div>
   );
 }
-
-export default WalletModal;

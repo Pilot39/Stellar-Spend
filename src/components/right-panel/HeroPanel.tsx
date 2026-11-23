@@ -2,12 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
-import {
-  type RightPanelProps,
-  getCurrencySymbol,
-  formatFiat,
-  formatRate,
-} from './types';
+import { type RightPanelProps, getCurrencySymbol, formatFiat, formatRate } from './types';
 
 export function HeroPanel({
   isConnected,
@@ -64,7 +59,9 @@ export function HeroPanel({
   }
 
   return (
-    <div
+    <section
+      aria-label="Payout summary"
+      aria-busy={isLoadingQuote || isConnecting}
       className={cn(
         'border border-[#333333] bg-[#111111] p-5 flex flex-col gap-4',
         isConnecting && 'animate-[pulse_2s_ease-in-out_infinite]',
@@ -72,7 +69,13 @@ export function HeroPanel({
     >
       <span className="text-[10px] tracking-[0.2em] text-[#777777] uppercase">{heroLabel}</span>
 
-      <div className="font-space-grotesk font-bold leading-none text-[clamp(1.6rem,3.5vw,2.4rem)]">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        aria-label={`${heroLabel}: ${heroMeta}`}
+        className="font-space-grotesk font-bold leading-none text-[clamp(1.6rem,3.5vw,2.4rem)]"
+      >
         {heroValue}
       </div>
 
@@ -80,7 +83,9 @@ export function HeroPanel({
 
       {!isConnected && !isConnecting && (
         <button
+          type="button"
           onClick={onConnect}
+          aria-label="Connect wallet to preview payout"
           className={cn(
             'mt-1 w-full py-2.5 min-h-[44px] text-xs tracking-widest border border-[#c9a962]',
             'text-[#c9a962] bg-transparent transition-colors duration-150',
@@ -91,6 +96,6 @@ export function HeroPanel({
           CONNECT WALLET
         </button>
       )}
-    </div>
+    </section>
   );
 }

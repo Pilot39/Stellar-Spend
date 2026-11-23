@@ -36,6 +36,8 @@ class PublicApiRateLimitStore {
   constructor() {
     // Cleanup expired entries every minute
     this.cleanupInterval = setInterval(() => this.cleanup(), 60_000);
+    // Do not keep the process alive just for cleanup (#1467).
+    this.cleanupInterval.unref?.();
   }
 
   async increment(key: string, windowMs: number): Promise<number> {
@@ -197,9 +199,7 @@ export function getRouteRateLimitConfig(pathname: string): RouteRateLimitConfig 
 
   // Pattern match for dynamic routes (e.g., /api/transactions/[hash])
   for (const [pattern, config] of Object.entries(PUBLIC_API_RATE_LIMITS)) {
-    const regexPattern = pattern
-      .replace(/\[.*?\]/g, '[^/]+')
-      .replace(/\//g, '\\/');
+    const regexPattern = pattern.replace(/\[.*?\]/g, '[^/]+').replace(/\//g, '\\/');
     const regex = new RegExp(`^${regexPattern}$`);
     if (regex.test(pathname)) {
       return config;
@@ -298,7 +298,7 @@ export function addRateLimitHeaders(response: NextResponse, request: NextRequest
 /**
  * Reset rate limit for a specific route and identifier (for testing/admin).
  */
-export async function resetPublicApiRateLimit(
+async function resetPublicApiRateLimit(
   pathname: string,
   identifier: string,
   isAuthenticated: boolean = false,
@@ -310,7 +310,7 @@ export async function resetPublicApiRateLimit(
 /**
  * Get current rate limit status for debugging.
  */
-export async function getPublicApiRateLimitStatus(
+async function getPublicApiRateLimitStatus(
   pathname: string,
   identifier: string,
   isAuthenticated: boolean = false,

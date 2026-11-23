@@ -7,14 +7,22 @@
 
 export type ThemeTokens = Record<string, string>;
 
-export const DARK_TOKENS: ThemeTokens = {
+/**
+ * WCAG 2.1 AA contrast thresholds.
+ * - Normal text: 4.5:1
+ * - Large text (>=18pt / 14pt bold) and UI components: 3:1
+ */
+export const WCAG_AA_NORMAL_TEXT = 4.5;
+export const WCAG_AA_LARGE_TEXT = 3;
+
+const DARK_TOKENS: ThemeTokens = {
   bg: '#0a0a0a',
   panel: '#131313',
   'panel-elevated': '#1a1a1a',
   'panel-overlay': '#1f1f1f',
   line: '#2a2a2a',
   'line-strong': '#3a3a3a',
-  muted: '#8a8a8a',
+  muted: '#9a9a9a',
   text: '#ffffff',
   'text-subtle': '#d0d0d0',
   accent: '#d4b06a',
@@ -25,7 +33,7 @@ export const DARK_TOKENS: ThemeTokens = {
   info: '#60a5fa',
 };
 
-export const LIGHT_TOKENS: ThemeTokens = {
+const LIGHT_TOKENS: ThemeTokens = {
   bg: '#f5f5f5',
   panel: '#ffffff',
   'panel-elevated': '#fafafa',
@@ -55,11 +63,11 @@ export const CHROME_TOKENS = {
   borderMuted: '#555555',
   gold: '#c9a962',
   goldHover: '#d4b982',
-  textDim: '#999999',
-  textFaint: '#666666',
+  textDim: '#a3a3a3',
+  textFaint: '#8a8a8a',
 } as const;
 
-export const HIGH_CONTRAST_TOKENS: ThemeTokens = {
+const HIGH_CONTRAST_TOKENS: ThemeTokens = {
   bg: '#000000',
   panel: '#000000',
   'panel-elevated': '#0a0a0a',
@@ -78,11 +86,104 @@ export const HIGH_CONTRAST_TOKENS: ThemeTokens = {
 };
 
 // ---------------------------------------------------------------------------
+// Contrast utilities
+// ---------------------------------------------------------------------------
+
+/** Parse a `#rgb` or `#rrggbb` hex color into 0-255 RGB channels. */
+export function parseHexColor(hex: string): { r: number; g: number; b: number } {
+  const normalized = hex.trim().replace(/^#/, '');
+  const expanded =
+    normalized.length === 3
+      ? normalized
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : normalized;
+  if (!/^[0-9a-fA-F]{6}$/.test(expanded)) {
+    throw new Error(`Invalid hex color: ${hex}`);
+  }
+  return {
+    r: parseInt(expanded.slice(0, 2), 16),
+    g: parseInt(expanded.slice(2, 4), 16),
+    b: parseInt(expanded.slice(4, 6), 16),
+  };
+}
+
+/** Relative luminance per WCAG 2.1 definition. */
+export function relativeLuminance(hex: string): number {
+  const { r, g, b } = parseHexColor(hex);
+  const channel = (value: number): number => {
+    const s = value / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+/** WCAG contrast ratio between two hex colors (range 1-21). */
+export function contrastRatio(foreground: string, background: string): number {
+  const l1 = relativeLuminance(foreground);
+  const l2 = relativeLuminance(background);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/** True when the pair meets WCAG AA for normal text (>= 4.5:1). */
+export function meetsWcagAa(foreground: string, background: string): boolean {
+  return contrastRatio(foreground, background) >= WCAG_AA_NORMAL_TEXT;
+}
+
+/** True when the pair meets WCAG AA for large text / UI components (>= 3:1). */
+export function meetsWcagAaLarge(foreground: string, background: string): boolean {
+  return contrastRatio(foreground, background) >= WCAG_AA_LARGE_TEXT;
+}
+
+/** Resolve the token map for a given theme name. */
+export function getThemeTokens(theme: 'dark' | 'light' | 'high-contrast'): ThemeTokens {
+  switch (theme) {
+    case 'dark':
+      return DARK_TOKENS;
+    case 'light':
+      return LIGHT_TOKENS;
+    case 'high-contrast':
+      return HIGH_CONTRAST_TOKENS;
+  }
+}
+
+/**
+ * Foreground/background token pairs that must meet WCAG AA normal-text contrast.
+ * Used by contrast regression tests to guard every theme.
+ */
+export const CONTRAST_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ['text', 'bg'],
+  ['text', 'panel'],
+  ['text', 'panel-elevated'],
+  ['text', 'panel-overlay'],
+  ['text-subtle', 'bg'],
+  ['text-subtle', 'panel'],
+  ['muted', 'bg'],
+  ['muted', 'panel'],
+  ['accent', 'bg'],
+  ['accent', 'panel'],
+  ['success', 'bg'],
+  ['warning', 'bg'],
+  ['error', 'bg'],
+  ['info', 'bg'],
+];
+
+// ---------------------------------------------------------------------------
 // Status variants
 // ---------------------------------------------------------------------------
 
 /** Semantic color roles shared by transaction badges and status-page indicators. */
-export type StatusVariant = 'success' | 'warning' | 'danger' | 'info' | 'accent' | 'neutral' | 'special';
+export type StatusVariant =
+  | 'success'
+  | 'warning'
+  | 'danger'
+  | 'info'
+  | 'accent'
+  | 'neutral'
+  | 'special';
 
 /** Container classes for each variant (border, background and text). */
 export const STATUS_VARIANT_CLASSES: Record<StatusVariant, string> = {
@@ -91,7 +192,7 @@ export const STATUS_VARIANT_CLASSES: Record<StatusVariant, string> = {
   danger: 'bg-red-500/10 border border-red-500/40 text-red-400',
   info: 'bg-blue-500/10 border border-blue-500/40 text-blue-400',
   accent: 'bg-[#c9a962]/15 border border-[#c9a962]/60 text-[#c9a962]',
-  neutral: 'bg-[#333333]/40 border border-[#333333] text-[#777777]',
+  neutral: 'bg-[#333333]/40 border border-[#333333] text-[#a3a3a3]',
   special: 'bg-purple-500/10 border border-purple-500/40 text-purple-400',
 };
 

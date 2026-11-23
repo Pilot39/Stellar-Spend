@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { onCLS, onFCP, onFID, onINP, onLCP, onTTFB } from 'web-vitals';
 
 /**
@@ -15,7 +15,14 @@ import { onCLS, onFCP, onFID, onINP, onLCP, onTTFB } from 'web-vitals';
  *   LCP  – Largest Contentful Paint
  *   TTFB – Time to First Byte
  */
-export function useWebVitals(): void {
+export interface UseWebVitalsResult {
+  /** Whether the vitals reporters have been registered. */
+  isActive: boolean;
+}
+
+export function useWebVitals(): UseWebVitalsResult {
+  const [isActive, setIsActive] = useState(false);
+
   useEffect(() => {
     function send(metric: { name: string; value: number; rating: string; id: string }): void {
       // Use sendBeacon so the report survives page unload
@@ -51,5 +58,9 @@ export function useWebVitals(): void {
     onINP(send);
     onLCP(send);
     onTTFB(send);
+
+    setIsActive(true);
   }, []);
+
+  return { isActive };
 }

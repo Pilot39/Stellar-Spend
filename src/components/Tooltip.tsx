@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { cn } from '@/lib/cn';
 
 export interface TooltipProps {
@@ -15,6 +15,7 @@ export function Tooltip({ content, children, position = 'top', delay = 200 }: To
   const [isMounted, setIsMounted] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout>();
   const triggerRef = useRef<HTMLDivElement>(null);
+  const tooltipId = useId();
 
   useEffect(() => {
     setIsMounted(true);
@@ -23,15 +24,39 @@ export function Tooltip({ content, children, position = 'top', delay = 200 }: To
     };
   }, []);
 
-  const handleMouseEnter = () => {
+  const show = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       setIsVisible(true);
     }, delay);
   };
 
-  const handleMouseLeave = () => {
+  const hide = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setIsVisible(false);
+  };
+
+  const handleMouseEnter = () => {
+    show();
+  };
+
+  const handleMouseLeave = () => {
+    hide();
+  };
+
+  const handleFocus = () => {
+    show();
+  };
+
+  const handleBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    hide();
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      hide();
+    }
   };
 
   if (!isMounted) return <>{children}</>;
@@ -58,11 +83,16 @@ export function Tooltip({ content, children, position = 'top', delay = 200 }: To
       className="relative inline-block"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      aria-describedby={isVisible ? tooltipId : undefined}
     >
       {children}
 
       {isVisible && (
         <div
+          id={tooltipId}
           className={cn(
             'absolute z-50 px-3 py-2 text-xs text-white bg-[#333333] rounded whitespace-nowrap',
             'animate-in fade-in duration-150',

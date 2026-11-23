@@ -1,20 +1,46 @@
 'use client';
 
 import { Suspense, useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useI18n } from '@/lib/i18n';
 import { useTheme } from '@/hooks/useTheme';
 import { useSyncSettings } from '@/hooks/useSyncSettings';
 import {
   SettingsNav,
   ProfileSettings,
-  SecuritySettings,
   AppearanceSettings,
   PreferencesSettings,
-  PrivacySyncSettings,
   SETTINGS_SECTIONS,
   type SettingsSection,
   type NotificationPrefs,
 } from './components';
+
+// ---------------------------------------------------------------------------
+// Section fallback — shown while a lazy-loaded settings section loads
+// ---------------------------------------------------------------------------
+function SectionFallback() {
+  return (
+    <div className="animate-pulse space-y-6" aria-busy="true" aria-live="polite">
+      <div className="h-6 w-40 bg-[#1a1a1a] rounded" />
+      <div className="h-4 w-full bg-[#1a1a1a] rounded" />
+      <div className="h-4 w-3/4 bg-[#1a1a1a] rounded" />
+      <div className="h-10 w-32 bg-[#1a1a1a] rounded" />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lazy-loaded heavy settings sections (#1437)
+// ---------------------------------------------------------------------------
+const SecuritySettings = dynamic(() => import('./components').then((mod) => mod.SecuritySettings), {
+  ssr: false,
+  loading: () => <SectionFallback />,
+});
+
+const PrivacySyncSettings = dynamic(
+  () => import('./components').then((mod) => mod.PrivacySyncSettings),
+  { ssr: false, loading: () => <SectionFallback /> },
+);
 
 // ---------------------------------------------------------------------------
 // Loading skeleton — shown while SettingsContent hydrates
@@ -50,7 +76,6 @@ function SettingsContent() {
     push: false,
     marketing: false,
   });
-  const [, setCurrency] = useState('USDC');
   const [userAddress, setUserAddress] = useState<string | null>(null);
 
   const { t, language, setLanguage } = useI18n();
@@ -65,9 +90,8 @@ function SettingsContent() {
     }
   }, []);
 
-  // TODO: Get user address from wallet context
+  // TODO(#1362): Get user address from wallet context
   useEffect(() => {
-    // Placeholder - should get from wallet context
     const stored = localStorage.getItem('userAddress');
     if (stored) {
       setUserAddress(stored);
@@ -89,7 +113,6 @@ function SettingsContent() {
     setTheme('system');
     setLanguage('en');
     setNotifications({ email: true, push: false, marketing: false });
-    setCurrency('USDC');
   };
 
   return (

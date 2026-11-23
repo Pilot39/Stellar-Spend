@@ -1,4 +1,4 @@
-import { cn } from '@/lib/cn';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 export interface SkeletonBaseProps {
   width?: string | number;
@@ -8,7 +8,8 @@ export interface SkeletonBaseProps {
 }
 
 /**
- * Base skeleton primitive — the single shared shimmer implementation.
+ * Base skeleton primitive — a thin, backwards-compatible wrapper around the
+ * shared `Skeleton` primitive (`@/components/ui/Skeleton`).
  *
  * The pulse + shimmer animation lives once in the `.skeleton` CSS class
  * (`src/app/globals.css`) and already honours `prefers-reduced-motion`.
@@ -26,12 +27,11 @@ export function SkeletonBase({
   'aria-label': ariaLabel,
 }: SkeletonBaseProps) {
   return (
-    <span
-      className={cn('skeleton', className)}
-      style={{ width, height }}
-      role="status"
+    <Skeleton
+      width={width}
+      height={height}
+      className={className}
       aria-label={ariaLabel ?? 'Loading…'}
-      aria-busy="true"
     />
   );
 }

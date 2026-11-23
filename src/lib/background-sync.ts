@@ -1,9 +1,10 @@
-import { logger } from '@/lib/logger';
-('use client');
+'use client';
 
+import { logger } from '@/lib/logger';
 import { useEffect, useState, useCallback } from 'react';
 import type { Transaction } from './transaction-storage';
 import { syncTransactionHistory, getSyncStatus } from './transaction-sync-client';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
 interface FailedTransaction extends Transaction {
   retryCount?: number;
@@ -35,33 +36,8 @@ export interface SyncStatus {
   syncing: boolean;
 }
 
-/**
- * Single source of connectivity state for the app. Components that need to
- * react to online/offline transitions should use this hook instead of adding
- * their own window listeners.
- */
-export function useOnlineStatus(): boolean {
-  const [isOnline, setIsOnline] = useState(true);
-
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  return isOnline;
-}
-
 export function useBackgroundSync() {
+  const isOnline = useOnlineStatus();
   const [isSupported, setIsSupported] = useState(false);
   const [failedTransactions, setFailedTransactions] = useState<FailedTransaction[]>([]);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
@@ -189,6 +165,7 @@ export function useBackgroundSync() {
   };
 
   return {
+    isOnline,
     isSupported,
     failedTransactions,
     addFailedTransaction,

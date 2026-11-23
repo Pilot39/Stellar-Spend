@@ -24,7 +24,7 @@ const PAYCREST_STATUS_MAP: Record<string, PayoutStatus> = {
   'payment_order.expired': 'expired',
 };
 
-export function mapPaycrestStatus(webhookStatus: string): PayoutStatus {
+function mapPaycrestStatus(webhookStatus: string): PayoutStatus {
   return PAYCREST_STATUS_MAP[webhookStatus] ?? 'pending';
 }
 
@@ -71,10 +71,13 @@ export class PaycrestAdapter implements PayoutProviderAdapter {
 
   async verifyAccount(institution: string, accountIdentifier: string): Promise<string> {
     try {
-      const response = await this.http.post<PaycrestVerifyAccountResponse>('/sender/verify-account', {
-        institution,
-        accountIdentifier,
-      });
+      const response = await this.http.post<PaycrestVerifyAccountResponse>(
+        '/sender/verify-account',
+        {
+          institution,
+          accountIdentifier,
+        },
+      );
       return response?.accountName || response?.data || '';
     } catch {
       return '';

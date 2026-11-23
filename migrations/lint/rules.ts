@@ -61,3 +61,23 @@ export function lintMigrationSql(sql: string): LintResult {
 
   return { safe: violations.length === 0, violations, overridden };
 }
+
+// Migrations up to this number predate the idempotency rule and are grandfathered.
+// They run once, guarded by the migration runner's version record (#1460).
+export const IDEMPOTENCY_BASELINE_VERSION = 9;
+
+const NON_IDEMPOTENT_PATTERNS: LintPattern[] = [
+  { name: 'CREATE TABLE without IF NOT EXISTS', pattern: /\bCREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS\b)/i },
+  { name: 'CREATE INDEX without IF NOT EXISTS', pattern: /\bCREATE\s+(UNIQUE\s+)?INDEX\s+(?!IF\s+NOT\s+EXISTS\b)/i },
+  { name: 'ADD COLUMN without IF NOT EXISTS', pattern: /\bADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS\b)/i },
+];
+
+/**
+ * Returns the non-idempotent statements in a migration's SQL (#1460).
+ * SQL comments are ignored. Only applies to migrations after the baseline.
+ */
+export function findNonIdempotentStatements(version: number, sql: string): string[] {
+  if (version <= IDEMPOTENCY_BASELINE_VERSION) return [];
+  const code = sql.replace(/--.*$/gm, '');
+  return NON_IDEMPOTENT_PATTERNS.filter((p) => p.pattern.test(code)).map((p) => p.name);
+}

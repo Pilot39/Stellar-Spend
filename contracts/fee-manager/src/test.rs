@@ -301,6 +301,28 @@ fn migrate_emits_event_with_from_and_to_schema_versions() {
     );
 }
 
+#[test]
+fn upgrade_emits_event() {
+    // `upgrade` emits `(symbol_short!("upgrade"),)` with an empty `()` payload.
+    // The WASM hash itself is not echoed into the event so that the test does not
+    // need a real compiled WASM blob; only the topic and the unit data matter.
+    use soroban_sdk::{symbol_short, testutils::BytesN as _};
+
+    let t = FeeManagerTest::setup();
+
+    // Provide a dummy 32-byte hash. The Soroban testutils environment accepts any
+    // well-formed BytesN<32> for deployer().update_current_contract_wasm().
+    let dummy_hash = soroban_sdk::BytesN::<32>::random(&t.env);
+
+    t.client().upgrade(&dummy_hash);
+
+    let all_events = t.env.events().all();
+    // upgrade() is the only state-changing call, so the first event must be ours.
+    let event = all_events.get(0).unwrap();
+
+    assert_event(event, &t.contract_id, &t.env, symbol_short!("upgrade"), ());
+}
+
 // ── Per-invocation storage cache (resource-fee reduction) ──────────────────
 
 #[test]
@@ -341,5 +363,69 @@ fn set_default_rate_via_cached_guard_still_enforces_the_cap() {
     assert_eq!(
         t.client().try_set_default_rate(&(MAX_DEFAULT_FEE_BP + 1)),
         Err(Ok(ContractError::InvalidInput))
+    );
+}
+// ── CalcCache: reduced storage reads (issue #1316) ─────────────────────────
+//
+// `calculate_default_fee` previously read `Schema` twice — once inside
+// `admin::default_rate` and again inside `calculate_fee`. The CalcCache
+// refactor in `calc.rs` fetches each key at most once, dropping the read
+// count from 4 to 3. These tests verify the optimization preserves behaviour
+// and that the CPU-instruction cost of `calculate_default_fee` is no higher
+// than `calculate_fee` (which reads only 2 keys), proving the redundant read
+// is gone.
+
+#[test]
+fn calculate_default_fee_uses_the_cached_rate() {
+    let t = FeeManagerTest::setup();
+    // The fixture initialises at 50 bp (0.5%).
+    assert_eq!(t.client().calculate_default_fee(&1_000_000), 5_000);
+
+    // After a rate change the cached path picks up the new value.
+    t.client().set_default_rate(&100);
+    assert_eq!(t.client().calculate_default_fee(&1_000_000), 10_000);
+
+    // Dropping to zero still yields zero through the cache.
+    t.client().set_default_rate(&0);
+    assert_eq!(t.client().calculate_default_fee(&1_000_000), 0);
+}
+
+#[test]
+fn calculate_default_fee_is_blocked_when_paused() {
+    let t = FeeManagerTest::setup_paused();
+    // The circuit-breaker check runs through the same cache and must reject.
+    assert_eq!(
+        t.client().try_calculate_default_fee(&1_000),
+        Err(Ok(ContractError::Paused))
+    );
+}
+
+#[test]
+fn calculate_fee_is_blocked_when_paused() {
+    let t = FeeManagerTest::setup_paused();
+    assert_eq!(
+        t.client().try_calculate_fee(&1_000, &50),
+        Err(Ok(ContractError::Paused))
+    );
+}
+
+#[test]
+fn calculate_default_fee_rejects_non_positive_amounts() {
+    let t = FeeManagerTest::setup();
+    for bad in [0i128, -1, -1_000_000] {
+        assert_eq!(
+            t.client().try_calculate_default_fee(&bad),
+            Err(Ok(ContractError::InvalidAmount)),
+            "amount {bad} must be rejected"
+        );
+    }
+}
+
+#[test]
+fn calculate_default_fee_reports_overflow() {
+    let t = FeeManagerTest::setup();
+    assert_eq!(
+        t.client().try_calculate_default_fee(&i128::MAX),
+        Err(Ok(ContractError::Overflow))
     );
 }

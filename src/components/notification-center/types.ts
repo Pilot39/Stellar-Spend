@@ -11,6 +11,35 @@ export interface NotificationCenterProps {
   onClearAll: () => void;
 }
 
+/**
+ * Shared state model for the NotificationCenter reducer/context.
+ * Kept in sync with the public `NotificationCenterProps` shape so the
+ * component can remain backwards compatible while consumers migrate to
+ * the context-based API.
+ */
+export interface NotificationState {
+  events: NotificationCenterEvent[];
+  unreadCount: number;
+  unreadBadgeText: string;
+  loading: boolean;
+}
+
+export type NotificationAction =
+  | { type: 'SET_EVENTS'; events: NotificationCenterEvent[] }
+  | { type: 'SET_LOADING'; loading: boolean }
+  | { type: 'MARK_AS_READ'; eventId: string }
+  | { type: 'MARK_ALL_AS_READ' }
+  | { type: 'REMOVE_EVENT'; eventId: string }
+  | { type: 'CLEAR_ALL' }
+  | { type: 'RESET'; state: NotificationState };
+
+export interface NotificationContextValue extends NotificationState {
+  markAsRead: (eventId: string) => void;
+  markAllAsRead: () => void;
+  removeEvent: (eventId: string) => void;
+  clearAll: () => void;
+}
+
 export function formatTime(timestamp: number): string {
   const now = Date.now();
   const diff = now - timestamp;

@@ -1,26 +1,60 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 const STORAGE_KEY = 'stellar-spend-advanced-options';
 
-export function useProgressiveDisclosure(key: string, defaultOpen = false) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  const [isMounted, setIsMounted] = useState(false);
+export interface UseProgressiveDisclosureResult {
+  isOpen: boolean;
+  toggle: () => void;
+  isMounted: boolean;
+}
+
+function getStorageKey(key: string): string {
+  return `${STORAGE_KEY}:${key}`;
+}
+
+function isStorageAvailable(): boolean {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+}
+
+export function useProgressiveDisclosure(
+  key: string,
+  defaultOpen = false,
+): UseProgressiveDisclosureResult {
+  const [isOpen, setIsOpen] = useState<boolean>(defaultOpen);
+  const [isMounted, setIsMounted] = useState<boolean>(false);
 
   useEffect(() => {
     setIsMounted(true);
-    const stored = localStorage.getItem(`${STORAGE_KEY}:${key}`);
-    if (stored !== null) {
-      setIsOpen(stored === 'true');
+
+    if (!isStorageAvailable()) {
+      return;
+    }
+
+    try {
+      const stored = window.localStorage.getItem(getStorageKey(key));
+      if (stored !== null) {
+        setIsOpen(stored === 'true');
+      }
+    } catch {
+      // Ignore storage read errors (e.g. privacy mode) and keep default state.
     }
   }, [key]);
 
-  const toggle = () => {
+  const toggle = useCallback(() => {
     setIsOpen((prev) => {
       const newValue = !prev;
-      localStorage.setItem(`${STORAGE_KEY}:${key}`, String(newValue));
+
+      if (isStorageAvailable()) {
+        try {
+          window.localStorage.setItem(getStorageKey(key), String(newValue));
+        } catch {
+          // Ignore storage write errors and keep in-memory state.
+        }
+      }
+
       return newValue;
     });
-  };
+  }, [key]);
 
   return {
     isOpen,

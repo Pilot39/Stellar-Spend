@@ -10,8 +10,21 @@ import type { HistoryFilters } from '@/hooks/useHistoryFilters';
 import { paginate } from '@/lib/pagination';
 
 export interface UseTransactionHistoryResult {
+  /** Raw transactions (API merged with local storage). */
   transactions: Transaction[];
+  /** Transactions after filters/sorting have been applied. */
+  filteredTransactions: Transaction[];
+  /** Transactions for the current page of the filtered list. */
+  paginatedTransactions: Transaction[];
+  /** Total number of pages for the filtered list. */
+  totalPages: number;
+  /** Current page (1-based). */
+  page: number;
+  /** Move to a specific page (clamped to valid range). */
+  setPage: (page: number) => void;
+  /** Whether the initial fetch is in flight. */
   isLoading: boolean;
+  /** Human-readable error message, or `null` when there is no error. */
   error: string | null;
   /**
    * Optimistically save a note: updates UI + local storage immediately, persists
@@ -28,6 +41,10 @@ export interface UseTransactionHistoryResult {
    * `null` on success.
    */
   submitTransaction: (transaction: Transaction) => Promise<string | null>;
+  /** @deprecated Use `filteredTransactions` instead. */
+  filtered: Transaction[];
+  /** @deprecated Use `paginatedTransactions` instead. */
+  paginated: Transaction[];
 }
 
 export interface UseTransactionHistoryOptions {
@@ -53,6 +70,7 @@ export function useTransactionHistory(
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPageState] = useState(1);
   const { showToast } = useToast();
 
   const { filtered } = useHistoryFilters(transactions, options.filters);
@@ -60,7 +78,25 @@ export function useTransactionHistory(
   // Pagination is derived from the filtered list; the page size is fixed for
   // the lifetime of the hook so the memo stays stable.
   const pageSize = options.pageSize ?? 20;
-  const paginated = useMemo(() => paginate(filtered, { page: 1, pageSize }), [filtered, pageSize]);
+  const paginated = useMemo(
+    () => paginate(filtered, { page, pageSize }),
+    [filtered, page, pageSize],
+  );
+  const totalPages = paginated.totalPages;
+
+  const setPage = useCallback(
+    (next: number) => {
+      const clamped = Math.min(Math.max(1, Math.trunc(next) || 1), Math.max(1, totalPages));
+      setPageState(clamped);
+    },
+    [totalPages],
+  );
+
+  // Reset to the first page whenever the filter inputs change so the user
+  // doesn't land on an out-of-range page after narrowing the list.
+  useEffect(() => {
+    setPageState(1);
+  }, [options.filters]);
 
   useEffect(() => {
     if (!walletAddress) {
@@ -157,9 +193,20 @@ export function useTransactionHistory(
     [showToast],
   );
 
-  // `paginated` is derived from the filtered list; expose the filtered view so
-  // consumers keep the same shape while the concerns stay separated.
-  void paginated;
-
-  return { transactions, isLoading, error, saveNote, updateTransaction, submitTransaction };
+  return {
+    transactions,
+    filteredTransactions: filtered,
+    paginatedTransactions: paginated.items,
+    totalPages,
+    page,
+    setPage,
+    isLoading,
+    error,
+    saveNote,
+    updateTransaction,
+    submitTransaction,
+    // Backwards-compatible aliases.
+    filtered,
+    paginated: paginated.items,
+  };
 }

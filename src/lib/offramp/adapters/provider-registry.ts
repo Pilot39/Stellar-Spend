@@ -8,7 +8,7 @@ export interface ProviderHealth {
   error?: string;
 }
 
-export interface ProviderCapabilities {
+interface ProviderCapabilities {
   supportedSourceChains: string[];
   supportedDestinationChains: string[];
   supportedTokens: string[];
@@ -36,6 +36,10 @@ export class BridgeProviderRegistry {
   private routes: PerCorridorRoute[] = [];
 
   registerBridge(name: string, adapter: BridgeProviderAdapter): void {
+    // A second registration would silently replace the first adapter (#1464).
+    if (this.bridges.has(name)) {
+      throw new Error(`Bridge provider already registered: ${name}`);
+    }
     this.bridges.set(name, adapter);
   }
 
@@ -171,4 +175,4 @@ export class BridgeProviderRegistry {
   }
 }
 
-export const providerRegistry = new BridgeProviderRegistry();
+const providerRegistry = new BridgeProviderRegistry();

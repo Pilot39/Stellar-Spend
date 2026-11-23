@@ -1,8 +1,23 @@
 import { NextResponse } from 'next/server';
-import { performHealthCheck } from '@/lib/health-check';
-import { checkDatabaseHealth } from '@/lib/health-check';
+import {
+  performHealthCheck,
+  checkDatabaseHealth,
+  type HealthCheckResult,
+} from '@/lib/health-check';
 
 export const dynamic = 'force-dynamic';
+
+/** Response body for the readiness probe (#1475) */
+interface ReadinessResponse {
+  status: 'ready' | 'not_ready';
+  timestamp: string;
+  checks: {
+    database: HealthCheckResult;
+    stellar: HealthCheckResult;
+    paycrest: HealthCheckResult;
+    allbridge: HealthCheckResult;
+  };
+}
 
 /**
  * GET /api/health/readiness
@@ -17,18 +32,14 @@ export const dynamic = 'force-dynamic';
  * Kubernetes / load-balancers use this to decide whether to route traffic.
  */
 export async function GET() {
-  const [healthResult, dbResult] = await Promise.all([
-    performHealthCheck(),
-    checkDatabaseHealth(),
-  ]);
+  const [healthResult, dbResult] = await Promise.all([performHealthCheck(), checkDatabaseHealth()]);
 
   const isReady =
-    dbResult.status !== 'unhealthy' &&
-    healthResult.dependencies.stellar.status !== 'unhealthy';
+    dbResult.status !== 'unhealthy' && healthResult.dependencies.stellar.status !== 'unhealthy';
 
   const status = isReady ? 200 : 503;
 
-  return NextResponse.json(
+  return NextResponse.json<ReadinessResponse>(
     {
       status: isReady ? 'ready' : 'not_ready',
       timestamp: new Date().toISOString(),

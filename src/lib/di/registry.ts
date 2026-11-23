@@ -35,7 +35,14 @@ import { AnalyticsService } from '@/lib/services/analytics-service';
 import { QRCodeService } from '@/lib/services/qrcode-service';
 import { OnrampService } from '@/lib/services/onramp.service';
 import { MerchantService } from '@/lib/services/merchant.service';
-import { dal, pool } from '@/lib/db';
+import { pool } from '@/lib/db';
+import {
+  TransactionRepository,
+  UserRepository,
+  ApiKeyRepository,
+  AuditLogRepository,
+  CurrencyRepository,
+} from '@/lib/repositories';
 
 export const SERVICE_KEYS = {
   QUOTE_SERVICE: 'QuoteService',
@@ -52,12 +59,39 @@ export const SERVICE_KEYS = {
   INSURANCE_SERVICE: 'InsuranceService',
   BATCH_SERVICE: 'BatchService',
   MERCHANT_SERVICE: 'MerchantService',
+  TRANSACTION_REPOSITORY: 'TransactionRepository',
+  USER_REPOSITORY: 'UserRepository',
+  API_KEY_REPOSITORY: 'ApiKeyRepository',
+  AUDIT_LOG_REPOSITORY: 'AuditLogRepository',
+  CURRENCY_REPOSITORY: 'CurrencyRepository',
 } as const;
 
 /**
  * Configure the DI container with all application services
  */
 export function configureServices(container: DIContainer): void {
+  // Repositories (data access layer)
+  container.registerSingleton<TransactionRepository>(
+    SERVICE_KEYS.TRANSACTION_REPOSITORY,
+    () => new TransactionRepository(pool),
+  );
+  container.registerSingleton<UserRepository>(
+    SERVICE_KEYS.USER_REPOSITORY,
+    () => new UserRepository(pool),
+  );
+  container.registerSingleton<ApiKeyRepository>(
+    SERVICE_KEYS.API_KEY_REPOSITORY,
+    () => new ApiKeyRepository(pool),
+  );
+  container.registerSingleton<AuditLogRepository>(
+    SERVICE_KEYS.AUDIT_LOG_REPOSITORY,
+    () => new AuditLogRepository(pool),
+  );
+  container.registerSingleton<CurrencyRepository>(
+    SERVICE_KEYS.CURRENCY_REPOSITORY,
+    () => new CurrencyRepository(pool),
+  );
+
   container.registerSingleton<IQuoteService>(SERVICE_KEYS.QUOTE_SERVICE, () => new QuoteService());
   container.registerSingleton<IBridgeService>(
     SERVICE_KEYS.BRIDGE_SERVICE,
@@ -73,7 +107,10 @@ export function configureServices(container: DIContainer): void {
   );
   container.registerSingleton<ITransactionService>(
     SERVICE_KEYS.TRANSACTION_SERVICE,
-    () => new TransactionService(dal),
+    () =>
+      new TransactionService(
+        container.resolveSync<TransactionRepository>(SERVICE_KEYS.TRANSACTION_REPOSITORY),
+      ),
   );
   container.registerSingleton<MerchantService>(
     SERVICE_KEYS.MERCHANT_SERVICE,

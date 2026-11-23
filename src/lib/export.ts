@@ -25,8 +25,55 @@ function triggerDownload(blob: Blob, filename: string): void {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  try {
+    a.click();
+  } finally {
+    // Remove the anchor and revoke the object URL once the download has been
+    // kicked off. Revoking synchronously right after click() can cancel the
+    // download in some browsers, so defer it to the next tick.
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Large-dataset safeguards
+// ---------------------------------------------------------------------------
+
+/**
+ * Threshold (in rows) above which exports are generated in chunks to avoid
+ * blocking the main thread and building enormous intermediate strings.
+ */
+export const LARGE_EXPORT_THRESHOLD = 5_000;
+
+/** Number of rows processed per chunk for large exports. */
+const EXPORT_CHUNK_SIZE = 1_000;
+
+export function isLargeExport(txs: Transaction[]): boolean {
+  return txs.length > LARGE_EXPORT_THRESHOLD;
+}
+
+/**
+ * Builds a string by processing `items` in chunks, yielding to the event loop
+ * between chunks so the UI stays responsive for large datasets.
+ */
+async function buildChunked(
+  items: Transaction[],
+  renderRow: (tx: Transaction) => string,
+  separator: string,
+): Promise<string> {
+  const parts: string[] = [];
+  for (let i = 0; i < items.length; i += EXPORT_CHUNK_SIZE) {
+    const chunk = items.slice(i, i + EXPORT_CHUNK_SIZE);
+    parts.push(chunk.map(renderRow).join(separator));
+    if (i + EXPORT_CHUNK_SIZE < items.length) {
+      // Yield to the event loop between chunks.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  return parts.join(separator);
 }
 
 function getTimestampedFilename(basename: string, ext: string): string {
@@ -76,31 +123,60 @@ const CSV_HEADERS = [
   'Error',
 ];
 
-export function exportCSV(txs: Transaction[], filename = 'transactions.csv'): void {
-  const rows = [
-    CSV_HEADERS.map(escapeCell).join(','),
-    ...txs.map((tx) =>
-      [
-        tx.id,
-        formatDate(tx.timestamp),
-        tx.amount,
-        tx.currency,
-        tx.stellarTxHash ?? '',
-        tx.bridgeStatus ?? '',
-        tx.payoutOrderId ?? '',
-        tx.payoutStatus ?? '',
-        tx.beneficiary.institution,
-        tx.beneficiary.accountName,
-        tx.beneficiary.accountIdentifier,
-        tx.status,
-        tx.error ?? '',
-      ]
-        .map(escapeCell)
-        .join(','),
-    ),
-  ];
+function renderCSVRow(tx: Transaction): string {
+  return [
+    tx.id,
+    formatDate(tx.timestamp),
+    tx.amount,
+    tx.currency,
+    tx.stellarTxHash ?? '',
+    tx.bridgeStatus ?? '',
+    tx.payoutOrderId ?? '',
+    tx.payoutStatus ?? '',
+    tx.beneficiary.institution,
+    tx.beneficiary.accountName,
+    tx.beneficiary.accountIdentifier,
+    tx.status,
+    tx.error ?? '',
+  ]
+    .map(escapeCell)
+    .join(',');
+}
 
-  triggerDownload(new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' }), filename);
+export function exportCSV(txs: Transaction[], filename = 'transactions.csv'): void {
+  try {
+    const header = CSV_HEADERS.map(escapeCell).join(',');
+    const body = txs.map(renderCSVRow).join('\n');
+    const csv = txs.length > 0 ? `${header}\n${body}` : header;
+
+    triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), filename);
+  } catch (error) {
+    logger.error('CSV export failed:', {}, error);
+    throw new Error('Failed to export to CSV');
+  }
+}
+
+/**
+ * Chunked CSV export for large datasets. Yields between chunks to keep the UI
+ * responsive. Falls back to the synchronous path for normal-sized exports.
+ */
+export async function exportCSVAsync(
+  txs: Transaction[],
+  filename = 'transactions.csv',
+): Promise<void> {
+  try {
+    if (!isLargeExport(txs)) {
+      exportCSV(txs, filename);
+      return;
+    }
+    const header = CSV_HEADERS.map(escapeCell).join(',');
+    const body = await buildChunked(txs, renderCSVRow, '\n');
+    const csv = txs.length > 0 ? `${header}\n${body}` : header;
+    triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), filename);
+  } catch (error) {
+    logger.error('CSV export failed:', {}, error);
+    throw new Error('Failed to export to CSV');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -157,43 +233,92 @@ export function exportPDF(txs: Transaction[], filename = 'transactions'): void {
 </body>
 </html>`;
 
-  const win = window.open('', '_blank', 'width=900,height=700');
-  if (!win) return;
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  // Small delay so the browser renders before print dialog
-  setTimeout(() => {
-    win.print();
-  }, 400);
+  try {
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) {
+      throw new Error('Popup blocked — please allow popups to export PDF');
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    // Small delay so the browser renders before print dialog
+    setTimeout(() => {
+      win.print();
+    }, 400);
+  } catch (error) {
+    logger.error('PDF export failed:', {}, error);
+    throw error instanceof Error ? error : new Error('Failed to export to PDF');
+  }
 }
 
 // ---------------------------------------------------------------------------
 // JSON export
 // ---------------------------------------------------------------------------
 
-export function exportJSON(txs: Transaction[], filename = 'transactions.json'): void {
-  const data = {
-    exportedAt: new Date().toISOString(),
-    transactionCount: txs.length,
-    transactions: txs.map((tx) => ({
-      id: tx.id,
-      date: formatDate(tx.timestamp),
-      timestamp: tx.timestamp,
-      amount: tx.amount,
-      currency: tx.currency,
-      stellarTxHash: tx.stellarTxHash,
-      bridgeStatus: tx.bridgeStatus,
-      payoutOrderId: tx.payoutOrderId,
-      payoutStatus: tx.payoutStatus,
-      beneficiary: tx.beneficiary,
-      status: tx.status,
-      error: tx.error,
-    })),
+function serializeJSONTransaction(tx: Transaction) {
+  return {
+    id: tx.id,
+    date: formatDate(tx.timestamp),
+    timestamp: tx.timestamp,
+    amount: tx.amount,
+    currency: tx.currency,
+    stellarTxHash: tx.stellarTxHash,
+    bridgeStatus: tx.bridgeStatus,
+    payoutOrderId: tx.payoutOrderId,
+    payoutStatus: tx.payoutStatus,
+    beneficiary: tx.beneficiary,
+    status: tx.status,
+    error: tx.error,
   };
+}
 
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  triggerDownload(blob, getTimestampedFilename(filename.replace('.json', ''), 'json'));
+export function exportJSON(txs: Transaction[], filename = 'transactions.json'): void {
+  try {
+    const data = {
+      exportedAt: new Date().toISOString(),
+      transactionCount: txs.length,
+      transactions: txs.map(serializeJSONTransaction),
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    triggerDownload(blob, getTimestampedFilename(filename.replace('.json', ''), 'json'));
+  } catch (error) {
+    logger.error('JSON export failed:', {}, error);
+    throw new Error('Failed to export to JSON');
+  }
+}
+
+/**
+ * Chunked JSON export for large datasets. Yields between chunks to keep the UI
+ * responsive. Falls back to the synchronous path for normal-sized exports.
+ */
+export async function exportJSONAsync(
+  txs: Transaction[],
+  filename = 'transactions.json',
+): Promise<void> {
+  try {
+    if (!isLargeExport(txs)) {
+      exportJSON(txs, filename);
+      return;
+    }
+    const body = await buildChunked(
+      txs,
+      (tx) => JSON.stringify(serializeJSONTransaction(tx), null, 2),
+      ',\n',
+    );
+    const json = `{
+  "exportedAt": ${JSON.stringify(new Date().toISOString())},
+  "transactionCount": ${txs.length},
+  "transactions": [
+${body}
+  ]
+}`;
+    const blob = new Blob([json], { type: 'application/json' });
+    triggerDownload(blob, getTimestampedFilename(filename.replace('.json', ''), 'json'));
+  } catch (error) {
+    logger.error('JSON export failed:', {}, error);
+    throw new Error('Failed to export to JSON');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -230,5 +355,44 @@ export async function exportXLSX(
   } catch (error) {
     logger.error('Excel export failed:', {}, error);
     throw new Error('Failed to export to Excel');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Unified export dispatcher (used by ExportControls)
+// ---------------------------------------------------------------------------
+
+export type ExportFormat = 'csv' | 'json' | 'xlsx' | 'pdf';
+
+/**
+ * Runs an export for the given format, routing large CSV/JSON datasets through
+ * the chunked async path. Errors are normalised to `Error` instances so callers
+ * (e.g. ExportControls) can surface a consistent message.
+ */
+export async function runExport(
+  format: ExportFormat,
+  txs: Transaction[],
+  filename?: string,
+): Promise<void> {
+  try {
+    switch (format) {
+      case 'csv':
+        await exportCSVAsync(txs, filename ?? 'transactions.csv');
+        break;
+      case 'json':
+        await exportJSONAsync(txs, filename ?? 'transactions.json');
+        break;
+      case 'xlsx':
+        await exportXLSX(txs, filename ?? 'transactions.xlsx');
+        break;
+      case 'pdf':
+        exportPDF(txs, filename ?? 'transactions');
+        break;
+      default:
+        throw new Error(`Unsupported export format: ${String(format)}`);
+    }
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error('Export failed');
   }
 }

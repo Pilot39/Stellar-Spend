@@ -250,6 +250,7 @@ export function useFormCardState({
   };
 
   return {
+    // Form values
     amount,
     feeMethod,
     currency,
@@ -259,28 +260,34 @@ export function useFormCardState({
     iban,
     institution,
     accountName,
+    // Remote data
     currencies,
     institutions,
     quote,
     insuranceQuote,
     insuranceEnabled,
     gasFees,
+    // Loading flags
     isCurrenciesLoading,
     isInstitutionsLoading,
     isQuoteLoading,
     isVerifyingAccount,
     isGasFeesLoading,
     isSubmitting,
+    // Errors
     amountError,
     quoteError,
     verifyError,
+    // Touched state
     touchedFields,
     touchField,
+    // Setters
     setBankMode,
     setRoutingNumber,
     setIban,
     setInsuranceEnabled,
     setInsuranceQuote,
+    // Handlers
     handleAmountChange,
     handleCurrencyChange,
     handleInstitutionChange,
@@ -289,3 +296,6 @@ export function useFormCardState({
     submitOfframp,
   };
 }
+
+export type FormCardState = ReturnType<typeof useFormCardState>;
+=======

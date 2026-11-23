@@ -1,3 +1,4 @@
+import { randomHex } from '@/lib/crypto/ids';
 import { ShareableTransaction, ShareSettings } from '@stellar-spend/shared';
 
 export class SharingService {
@@ -7,7 +8,7 @@ export class SharingService {
     settings: ShareSettings,
   ): Promise<ShareableTransaction> {
     const shareToken = this.generateShareToken();
-    const id = `share_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const id = `share_${Date.now()}_${randomHex(6)}`;
 
     const share: ShareableTransaction = {
       id,
@@ -22,32 +23,30 @@ export class SharingService {
       viewCount: 0,
     };
 
-    // TODO: Persist to database
+    // TODO(#1364): Persist to database
     return share;
   }
 
   async getShareLink(_shareToken: string): Promise<ShareableTransaction | null> {
-    // TODO: Fetch from database
+    // TODO(#1364): Fetch from database
     return null;
   }
 
   async incrementViewCount(_shareToken: string): Promise<void> {
-    // TODO: Update view count in database
+    // TODO(#1364): Update view count in database
   }
 
   async revokeShareLink(_shareToken: string): Promise<void> {
-    // TODO: Delete from database
+    // TODO(#1364): Delete from database
   }
 
   async getUserShareLinks(_userAddress: string): Promise<ShareableTransaction[]> {
-    // TODO: Fetch from database
+    // TODO(#1364): Fetch from database
     return [];
   }
 
   private generateShareToken(): string {
-    return (
-      Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-    );
+    return randomHex(24);
   }
 
   generateShareUrl(shareToken: string, baseUrl: string): string {

@@ -31,13 +31,33 @@ export const inputVariants = cva(
 
 export interface InputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'>,
-    VariantProps<typeof inputVariants> {}
+    VariantProps<typeof inputVariants> {
+  /** Id of the element describing this input (e.g. hint or error text). */
+  describedBy?: string;
+  /** Marks the input as required for assistive technology. */
+  required?: boolean;
+}
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, variant, inputSize, ...props }, ref) => (
+  (
+    {
+      className,
+      variant,
+      inputSize,
+      describedBy,
+      required,
+      'aria-invalid': ariaInvalid,
+      'aria-describedby': ariaDescribedBy,
+      'aria-required': ariaRequired,
+      ...props
+    },
+    ref,
+  ) => (
     <input
       ref={ref}
-      aria-invalid={variant === 'error' ? true : props['aria-invalid']}
+      aria-invalid={variant === 'error' ? true : ariaInvalid}
+      aria-describedby={describedBy ?? ariaDescribedBy}
+      aria-required={required ? true : ariaRequired}
       className={cn(inputVariants({ variant, inputSize }), className)}
       {...props}
     />

@@ -1,3 +1,6 @@
+import { apiRequest, ApiError } from '../api/client';
+import { DEFAULT_TIMEOUT_MS } from './base';
+
 export interface HttpClientConfig {
   baseUrl?: string;
   timeout?: number;
@@ -45,7 +48,7 @@ export class HttpClient {
   constructor(config: HttpClientConfig = {}) {
     this.config = {
       baseUrl: config.baseUrl,
-      timeout: config.timeout ?? 15000,
+      timeout: config.timeout ?? DEFAULT_TIMEOUT_MS,
       retries: config.retries ?? 3,
       retryDelay: config.retryDelay ?? 1000,
       backoffMultiplier: config.backoffMultiplier ?? 2,
@@ -95,58 +98,32 @@ export class HttpClient {
     let lastError: Error = new Error('Request failed');
 
     for (let attempt = 0; attempt <= this.config.retries; attempt++) {
-      const controller = new AbortController();
-      const timerId = setTimeout(() => controller.abort(), this.config.timeout);
-      const start = Date.now();
-
       try {
-        const response = await fetch(url, { ...mergedInit, signal: controller.signal });
-        clearTimeout(timerId);
-        const durationMs = Date.now() - start;
-        this.config.onResponse?.(url, response.status, durationMs);
-
-        let data: unknown;
-        try {
-          data = await response.json();
-        } catch {
-          /* non-JSON */
-        }
-
-        if (!response.ok) {
-          const err = new HttpClientError(
-            (data as { message?: string })?.message || response.statusText || 'Unknown error',
-            response.status,
-            data,
-          );
-          // Don't retry 4xx except 429
-          if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-            this.recordFailure();
-            throw err;
-          }
-          throw err;
-        }
-
+        // Delegate fetch/JSON/error handling to the centralized typed client.
+        const result = await apiRequest<T>(url, {
+          ...mergedInit,
+          timeout: this.config.timeout,
+          onResponse: (status, durationMs) => this.config.onResponse?.(url, status, durationMs),
+        });
         this.recordSuccess();
-        return ((data as { data?: T })?.data ?? data) as T;
+        return result;
       } catch (error) {
-        clearTimeout(timerId);
-        if (
-          error instanceof HttpClientError &&
-          error.status >= 400 &&
-          error.status < 500 &&
-          error.status !== 429
-        ) {
-          throw error;
-        }
         if (error instanceof CircuitOpenError) throw error;
 
-        const err = error as { name?: string; message?: string };
-        if (err.name === 'AbortError') {
-          lastError = new HttpClientError('Request timeout', 504);
-        } else if (error instanceof HttpClientError) {
-          lastError = error;
+        if (error instanceof ApiError) {
+          // Don't retry 4xx except 429
+          if (error.status >= 400 && error.status < 500 && error.status !== 429) {
+            this.recordFailure();
+            throw new HttpClientError(error.message, error.status, error.details);
+          }
+          lastError = new HttpClientError(error.message, error.status, error.details);
         } else {
-          lastError = new HttpClientError(err.message || 'Network error', 502);
+          const err = error as { name?: string; message?: string };
+          if (err.name === 'AbortError') {
+            lastError = new HttpClientError('Request timeout', 504);
+          } else {
+            lastError = new HttpClientError(err.message || 'Network error', 502);
+          }
         }
 
         if (attempt < this.config.retries) {

@@ -651,3 +651,147 @@ fn refunded_deposit_cannot_be_released_or_refunded() {
         "a cancelled deposit must not be refundable"
     );
 }
+
+#[test]
+fn deposit_in_disputed_state_blocks_release_and_refund() {
+    use crate::DataKey;
+    use crate::dispute::DisputeHandler;
+
+    let t = EscrowTest::setup();
+    let id = t.deposit(750);
+
+    // Put the deposit into Disputed state directly via DisputeHandler.
+    t.env.as_contract(&t.contract_id, || {
+        DisputeHandler::create_dispute(
+            &t.env,
+            id,
+            t.depositor.clone(),
+            t.bridge.clone(),
+            soroban_sdk::String::from_str(&t.env, "dispute reason"),
+            soroban_sdk::String::from_str(&t.env, "evidence"),
+        )
+        .expect("dispute creation should succeed");
+    });
+
+    let record = t.client().get_deposit(&id);
+    assert_eq!(
+        record.status,
+        EscrowStatus::Disputed,
+        "deposit must be Disputed after DisputeHandler::create_dispute"
+    );
+
+    // Release must be blocked on a Disputed deposit.
+    assert_eq!(
+        t.client().try_release(&id, &Address::generate(&t.env)),
+        Err(Ok(ContractError::AlreadyProcessed)),
+        "release must be rejected on a Disputed deposit"
+    );
+
+    // Refund must also be blocked on a Disputed deposit, even after the timeout.
+    t.advance_past_timeout();
+    assert_eq!(
+        t.client().try_refund(&id),
+        Err(Ok(ContractError::AlreadyProcessed)),
+        "refund must be rejected on a Disputed deposit"
+    );
+
+    // can_refund reports false for a Disputed deposit.
+    assert!(
+        !t.client().can_refund(&id),
+        "can_refund must return false for a Disputed deposit"
+    );
+}
+
+// ── Deployment / migration runbook acceptance checks (issue #1424) ───────────
+//
+// These tests back the acceptance checks documented in the deployment and
+// migration runbook (`migrations/README.md`). They assert the invariants the
+// documented deploy order relies on:
+//
+//   1. After `init`, `schema_version` reports the current `SCHEMA_VERSION`
+//      (so the runbook's post-deploy verification step is meaningful).
+//   2. `migrate` on an already-current contract is a no-op that reports
+//      `SchemaAlreadyCurrent` (so re-running the migration step is safe).
+//   3. `upgrade` requires the admin's authorisation (so a deploy cannot be
+//      hijacked by an unauthorised caller).
+
+#[test]
+fn schema_version_matches_expected_after_init() {
+    // Runbook step: "after init, verify schema_version == SCHEMA_VERSION".
+    let t = EscrowTest::setup();
+    assert_eq!(
+        t.client().schema_version(),
+        SCHEMA_VERSION,
+        "a freshly initialised contract must report the current schema version"
+    );
+}
+
+#[test]
+fn migrate_on_current_schema_reports_already_current() {
+    // Runbook step: "re-running migrate is safe and idempotent".
+    let t = EscrowTest::setup();
+    assert_eq!(
+        t.client().try_migrate(),
+        Err(Ok(ContractError::SchemaAlreadyCurrent)),
+        "migrate on an already-current contract must report SchemaAlreadyCurrent"
+    );
+    // The failed migrate must not have moved the schema version.
+    assert_eq!(t.client().schema_version(), SCHEMA_VERSION);
+}
+
+#[test]
+fn migrate_from_legacy_state_reaches_current_schema() {
+    // Runbook step: "migrate upgrades a legacy deployment to SCHEMA_VERSION".
+    let t = EscrowTest::with_legacy_v1_state();
+    t.client().migrate();
+    assert_eq!(
+        t.client().schema_version(),
+        SCHEMA_VERSION,
+        "migrate must bring a legacy deployment up to the current schema version"
+    );
+    // A second migrate is now a no-op.
+    assert_eq!(
+        t.client().try_migrate(),
+        Err(Ok(ContractError::SchemaAlreadyCurrent))
+    );
+}
+
+#[test]
+fn upgrade_requires_admin_authorisation() {
+    // Runbook step: "upgrade must be authorised by the admin".
+    let t = EscrowTest::setup();
+    let new_wasm_hash = soroban_sdk::BytesN::from_array(&t.env, &[7u8; 32]);
+
+    // Mock authorisation for a non-admin address: the admin's `require_auth`
+    // has no matching entry, so the host refuses the call before any state
+    // changes.
+    t.env.mock_auths(&[MockAuth {
+        address: &t.other,
+        invoke: &MockAuthInvoke {
+            contract: &t.contract_id,
+            fn_name: "upgrade",
+            args: Vec::from_array(&t.env, [new_wasm_hash.clone().into_val(&t.env)]),
+            sub_invokes: &[],
+        },
+    }]);
+
+    assert!(
+        t.client().try_upgrade(&new_wasm_hash).is_err(),
+        "upgrade must be rejected when the admin has not authorised it"
+    );
+
+    // With the admin's own authorisation the call is accepted.
+    t.env.mock_auths(&[MockAuth {
+        address: &t.admin,
+        invoke: &MockAuthInvoke {
+            contract: &t.contract_id,
+            fn_name: "upgrade",
+            args: Vec::from_array(&t.env, [new_wasm_hash.clone().into_val(&t.env)]),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(
+        t.client().try_upgrade(&new_wasm_hash).is_ok(),
+        "upgrade must succeed when authorised by the admin"
+    );
+}

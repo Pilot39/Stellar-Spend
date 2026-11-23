@@ -5,8 +5,12 @@ import * as path from 'path';
 /**
  * GET /openapi.yaml
  *
- * Serves the OpenAPI 3.0 YAML specification for external consumers,
+ * Serves the canonical OpenAPI 3.0 YAML specification for external consumers,
  * API gateways, client SDK generators, and Swagger UI.
+ *
+ * The specification is read directly from the single canonical `openapi.yaml`
+ * file at the project root. There are no duplicate copies (e.g. openapi.json)
+ * to keep in sync.
  */
 export async function GET() {
   try {

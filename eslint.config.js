@@ -85,8 +85,7 @@ const BOUNDARY_PATTERNS = [
   // Contract internals must never be imported from TypeScript
   {
     group: ['**/contracts/**'],
-    message:
-      'Do not import Rust contract internals from TypeScript. Use generated bindings only.',
+    message: 'Do not import Rust contract internals from TypeScript. Use generated bindings only.',
   },
 ];
 
@@ -145,7 +144,62 @@ export default [
           ignoreRestSiblings: true,
         },
       ],
-      'no-console': 'warn',
+      // Escalated to error in src/** below; warn here covers everything else
+      // (e2e/, scripts/ .ts files, root config files, etc.) so accidental
+      // console leaks are still surfaced outside the strict application layer.
+      'no-console': ['error', { allow: ['warn', 'error'] }],
+
+      // ── Naming conventions (#1539) ───────────────────────────────────────────
+      // Enforce camelCase for variables and functions; PascalCase for classes;
+      // UPPER_CASE for constants. This matches the conventions documented in
+      // CONTRIBUTING.md § Naming.
+      '@typescript-eslint/naming-convention': [
+        'warn',
+        { selector: 'variable', format: ['camelCase', 'UPPER_CASE', 'PascalCase'] },
+        { selector: 'function', format: ['camelCase', 'PascalCase'] },
+        { selector: 'typeLike', format: ['PascalCase'] },
+      ],
+      // Floating promises (unawaited async calls) hide errors silently.
+      // Prefix with `void` to explicitly opt out: `void somePromise()`.
+      '@typescript-eslint/no-floating-promises': 'error',
+      // Empty catch blocks swallow errors with no trace.
+      // At minimum log the caught error or rethrow it.
+      // Prefix the catch parameter with _ to suppress when intentional:
+      //   catch (_e) { /* intentionally ignored */ }
+      'no-empty': ['error', { allowEmptyCatch: false }],
+
+      // ── Function complexity & length rules (#1537) ──────────────────────────
+      // These rules surface overly complex or long functions that are hard to
+      // test and maintain. Set to 'warn' so the --max-warnings 50 budget is not
+      // exceeded; refactor flagged functions to bring the count down over time.
+      'complexity': ['warn', 15],
+      'max-lines-per-function': ['warn', { max: 120, skipComments: true, IIFEs: true }],
+      'max-depth': ['warn', 4],
+      'max-nested-callbacks': ['warn', 3],
+      'max-statements': ['warn', 40],
+
+      // ── No-warning-comments / stale TODO rules (#1538) ───────────────────────
+      // TODO/FIXME comments must reference a GitHub issue number to be tracked.
+      // Commented-out code blocks are prohibited in production source.
+      'no-warning-comments': [
+        'warn',
+        {
+          terms: ['todo', 'fixme', 'xxx'],
+          location: 'anywhere',
+        },
+      ],
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // scripts/** exemption — CLI tools write to stdout/stderr intentionally.
+  // console.* is the correct output mechanism for Node.js scripts; there is
+  // no structured logger available in that context.
+  // ---------------------------------------------------------------------------
+  {
+    files: ['scripts/**/*.{ts,js,cjs,mjs}'],
+    rules: {
+      'no-console': 'off',
     },
   },
 
@@ -190,8 +244,7 @@ export default [
             },
             {
               group: ['@stellar-spend/mobile', '../mobile/**', '../../packages/mobile/**'],
-              message:
-                'packages/shared must be standalone. It cannot import from packages/mobile.',
+              message: 'packages/shared must be standalone. It cannot import from packages/mobile.',
             },
           ],
         },
@@ -226,6 +279,21 @@ export default [
     ignores: ['src/**/__tests__/**', 'src/**/*.test.{ts,tsx}', 'src/**/*.spec.{ts,tsx}'],
     rules: {
       'no-console': ['error', { allow: ['warn', 'error'] }],
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // Explicitly enforce no-explicit-any as an error for src/lib (#1355).
+  // The rule is already set globally but this block makes the intent explicit
+  // for the lib layer: `any` defeats TypeScript's safety guarantees and must
+  // not appear in shared library code.  Use `unknown` + type-guards, precise
+  // union types, or targeted eslint-disable comments with a justification
+  // comment when interacting with untyped third-party APIs.
+  // ---------------------------------------------------------------------------
+  {
+    files: ['src/lib/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
     },
   },
 ];

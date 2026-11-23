@@ -1,4 +1,5 @@
 import { isValidQuote } from '@/lib/offramp';
+import { validateBankAccount } from '@/lib/validation';
 import type { Currency, Institution, GasFeeOptions, FeeMethod, QuoteResult } from './types';
 
 export async function fetchCurrencies(): Promise<Currency[]> {
@@ -40,6 +41,10 @@ export async function verifyAccount(
   accountNumber: string,
   currency: string,
 ): Promise<string> {
+  const validation = validateBankAccount(accountNumber, currency);
+  if (!validation.valid) {
+    throw new Error(validation.error || 'Invalid account number');
+  }
   const res = await fetch('/api/offramp/verify-account', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

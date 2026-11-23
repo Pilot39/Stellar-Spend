@@ -1,5 +1,6 @@
 import { logger } from '@/lib/logger';
 import { readStoredJson, writeStoredJson, removeStoredItem } from '@/lib/transaction-storage';
+import { isOnline } from '@/lib/online-status';
 /**
  * Sync Storage
  * Manages client-side sync state and metadata for transaction history synchronization.
@@ -110,6 +111,21 @@ export class SyncStorage {
     if (!writeStoredJson(SYNC_QUEUE_KEY, filtered)) {
       logger.error('Failed to add to sync queue:', {});
     }
+  }
+
+  /**
+   * Whether there are queued changes waiting to be synced.
+   * Online status is delegated to the shared online-status module.
+   */
+  static hasPendingSync(): boolean {
+    return this.getQueue().length > 0;
+  }
+
+  /**
+   * Whether sync should run now: enabled, online, and pending work exists.
+   */
+  static canSyncNow(): boolean {
+    return this.getSettings().syncEnabled && isOnline() && this.hasPendingSync();
   }
 
   /**

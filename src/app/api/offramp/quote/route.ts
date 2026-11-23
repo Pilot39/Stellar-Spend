@@ -1,132 +1,30 @@
-import { logger } from '@/lib/logger';
 import { NextResponse, type NextRequest } from 'next/server';
-import type { ChainDetailsWithTokens } from '@allbridge/bridge-core-sdk';
-import { env } from '@/lib/env';
-import { fetchPaycrestQuote, buildQuote, calculateBridgeAmount } from '@/lib/offramp';
-import { ErrorHandler, ApiError, ErrorType } from '@/lib/error-handler';
-import { withAllbridgeTimeout } from '@/lib/offramp';
-import { isSupportedCurrency } from '@/lib/currencies';
-import { screenAddress } from '@/lib/compliance-screening';
-import { quoteRouteSchema, formatZodErrors } from '@/lib/validators';
+import { logger } from '@/lib/logger';
+import { validateBody } from '@/lib/error-handler';
+import { quoteRouteSchema } from '@/lib/validators';
+import { getOfframpQuote } from '@/lib/services/offramp-quote';
 
 export const maxDuration = 20;
 
-const STABLECOIN_FEE = '0.5';
-
-// Client sends "USDC" | "XLM"; build-tx route uses "stablecoin" | "native"
-const FEE_METHOD_MAP: Record<string, 'stablecoin' | 'native'> = {
-  USDC: 'stablecoin',
-  stablecoin: 'stablecoin',
-  XLM: 'native',
-  native: 'native',
-};
-
 export async function POST(request: NextRequest) {
-  let rawBody: unknown;
-  try {
-    rawBody = await request.json();
-  } catch {
-    return ErrorHandler.validation('Invalid JSON body');
+  const validation = await validateBody(request, quoteRouteSchema);
+  if (!validation.success) {
+    return validation.response;
   }
 
-  const parsed = quoteRouteSchema.safeParse(rawBody);
-  if (!parsed.success) {
-    const errors = formatZodErrors(parsed.error);
-    return ErrorHandler.handle(
-      new ApiError(ErrorType.VALIDATION, errors[0].message, 400, { errors }),
-    );
-  }
-
-  const { amount, currency, feeMethod, sourceAddress } = parsed.data;
-
   try {
-    if (!isSupportedCurrency(currency)) {
-      return ErrorHandler.handle(
-        new ApiError(ErrorType.VALIDATION, `Unsupported currency: ${currency}`, 400),
-      );
-    }
-
-    if (sourceAddress) {
-      const screeningResult = await screenAddress({
-        address: sourceAddress,
-        addressType: 'stellar',
-        amount: parseFloat(amount),
-        currency,
-      });
-      if (screeningResult.verdict === 'deny') {
-        return ErrorHandler.forbidden(
-          'Source address blocked by compliance screening',
-        );
-      }
-    }
-
-    const normalizedFee = FEE_METHOD_MAP[feeMethod];
-    const bridgeAmount = normalizedFee === 'stablecoin'
-      ? calculateBridgeAmount(String(amount), 'stablecoin', STABLECOIN_FEE)
-      : String(amount);
-
-    // Initialize Allbridge SDK
-    let receiveAmount: string;
-    try {
-      const { AllbridgeCoreSdk, nodeRpcUrlsDefault } = await import('@allbridge/bridge-core-sdk');
-
-      const sdk = new AllbridgeCoreSdk({
-        ...nodeRpcUrlsDefault,
-        sorobanNetworkPassphrase: 'Public Global Stellar Network ; September 2015',
-        ...(env.public.NEXT_PUBLIC_STELLAR_SOROBAN_RPC_URL && {
-          sorobanRpc: env.public.NEXT_PUBLIC_STELLAR_SOROBAN_RPC_URL,
-        }),
-        ...(env.server.BASE_RPC_URL && { ETH: env.server.BASE_RPC_URL }),
-      });
-
-      const chainDetails = await sdk.chainDetailsMap();
-      let stellarChain: ChainDetailsWithTokens | null = null;
-      let baseChain: ChainDetailsWithTokens | null = null;
-
-      for (const [, chain] of Object.entries(chainDetails)) {
-        const c = chain;
-        if (c.name?.toLowerCase().includes('stellar') || c.name?.toLowerCase().includes('soroban'))
-          stellarChain = c;
-        if (c.name?.toLowerCase().includes('ethereum') || c.name?.toLowerCase().includes('base'))
-          baseChain = c;
-      }
-
-      if (!stellarChain || !baseChain) throw new Error('Chain details unavailable');
-
-      const stellarUsdc = stellarChain.tokens.find((t) => t.symbol === 'USDC');
-      const baseUsdc = baseChain.tokens.find((t) => t.symbol === 'USDC');
-
-      if (!stellarUsdc || !baseUsdc) throw new Error('USDC token not found');
-
-      receiveAmount = await withAllbridgeTimeout(
-        sdk.getAmountToBeReceived(bridgeAmount, stellarUsdc, baseUsdc),
-        'getAmountToBeReceived',
-      );
-    } catch (error) {
-      return ErrorHandler.handle(
-        ApiError.externalService('Allbridge', 'Bridge quote unavailable'),
-      );
-    }
-
-    // Fetch Paycrest FX rate
-    let rate: number;
-    let destinationAmount: string;
-    try {
-      ({ rate, destinationAmount } = await fetchPaycrestQuote(receiveAmount, currency));
-    } catch (error) {
-      return ErrorHandler.handle(
-        ApiError.externalService('Paycrest', 'FX rate unavailable'),
-      );
-    }
-
-    const quote = buildQuote(destinationAmount, rate, currency, '0', '0', 300);
+    const quote = await getOfframpQuote(validation.data);
     return NextResponse.json(quote);
   } catch (error) {
     logger.error('Quote fetch error', {}, error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    if (message.includes('Invalid') || message.includes('less than')) {
-      return ErrorHandler.handle(new ApiError(ErrorType.VALIDATION, message, 400));
-    }
-    return ErrorHandler.serverError(error);
+    return NextResponse.json(
+      {
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to fetch quote',
+        },
+      },
+      { status: 500 },
+    );
   }
 }

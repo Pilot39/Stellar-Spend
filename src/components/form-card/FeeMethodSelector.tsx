@@ -1,6 +1,9 @@
+import { useRef } from 'react';
 import { cn } from '@/lib/cn';
 import { Skeleton } from '@/components/ui/Skeleton';
 import type { FeeMethod, GasFeeOptions } from './types';
+
+const FEE_METHODS: FeeMethod[] = ['USDC', 'XLM'];
 
 export interface FeeMethodSelectorProps {
   feeMethod: FeeMethod;
@@ -17,9 +20,37 @@ export function FeeMethodSelector({
   disabled,
   onChange,
 }: FeeMethodSelectorProps) {
+  const buttonRefs = useRef<Record<FeeMethod, HTMLButtonElement | null>>({
+    USDC: null,
+    XLM: null,
+  });
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (disabled) return;
+    const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+    let nextIndex = index;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      nextIndex = (index + 1) % FEE_METHODS.length;
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      nextIndex = (index - 1 + FEE_METHODS.length) % FEE_METHODS.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = FEE_METHODS.length - 1;
+    }
+    const nextMethod = FEE_METHODS[nextIndex];
+    onChange(nextMethod);
+    buttonRefs.current[nextMethod]?.focus();
+  };
+
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[10px] tracking-[0.18em] text-[#777777] uppercase">
+      <span
+        id="fee-method-label"
+        className="text-[10px] tracking-[0.18em] text-[#777777] uppercase"
+      >
         Gas Fee Method
       </span>
       {isLoading ? (
@@ -28,15 +59,28 @@ export function FeeMethodSelector({
           <Skeleton width="50%" height={44} aria-label="Loading fee option…" />
         </div>
       ) : (
-        <div className="flex gap-2">
-          {(['USDC', 'XLM'] as FeeMethod[]).map((m) => {
+        <div
+          role="radiogroup"
+          aria-labelledby="fee-method-label"
+          aria-disabled={disabled || undefined}
+          className="flex gap-2"
+        >
+          {FEE_METHODS.map((m, index) => {
             const fee = m === 'USDC' ? gasFees?.usdcFee : gasFees?.xlmFee;
             const active = feeMethod === m;
             return (
               <button
                 key={m}
+                ref={(el) => {
+                  buttonRefs.current[m] = el;
+                }}
                 type="button"
+                role="radio"
+                aria-checked={active}
+                aria-label={`${m} fee method`}
+                tabIndex={active ? 0 : -1}
                 onClick={() => onChange(m)}
+                onKeyDown={(event) => handleKeyDown(event, index)}
                 disabled={disabled}
                 className={cn(
                   'flex-1 py-2.5 px-3 min-h-[44px] text-xs tracking-widest border transition-colors duration-150',
@@ -54,7 +98,7 @@ export function FeeMethodSelector({
           })}
         </div>
       )}
-      <p className="text-[10px] text-[#666666] leading-relaxed">
+      <p id="fee-method-description" className="text-[10px] text-[#666666] leading-relaxed">
         {feeMethod === 'XLM'
           ? 'XLM will be used to cover Stellar network fees.'
           : 'A small USDC amount will be deducted to cover network fees.'}

@@ -1,13 +1,21 @@
 /**
- * Standard error response interface that all API routes should follow
+ * Standard error response interface that all API routes should follow.
+ *
+ * Backwards compatible: `error` remains the top-level machine-readable string
+ * (kept for existing clients). New clients should prefer `code`, which is a
+ * stable machine-readable identifier (see {@link ErrorType}).
  */
 export interface StandardErrorResponse {
-  /** Machine-readable error code or short message */
+  /** Machine-readable error code or short message (legacy, kept for compatibility) */
   error: string;
+  /** Stable machine-readable error code (see {@link ErrorType}) */
+  code: string;
   /** Human-readable description (optional) */
   message?: string;
   /** Additional context (development only) */
   details?: unknown;
+  /** Correlation id for tracing the request (optional) */
+  requestId?: string;
 }
 
 /**
@@ -20,16 +28,7 @@ export interface ErrorContext {
   message?: string;
   details?: Record<string, unknown>;
   stack?: string;
-}
-
-/**
- * Environment configuration for error handling
- */
-export interface EnvironmentConfig {
-  isProduction: boolean;
-  includeStackTrace: boolean;
-  includeDetails: boolean;
-  logLevel: 'error' | 'warn' | 'info' | 'debug';
+  requestId?: string;
 }
 
 /**
@@ -61,31 +60,10 @@ export const ERROR_STATUS_CODES: Record<ErrorType, number> = {
 };
 
 /**
- * Utility function to get environment configuration
- */
-export function getEnvironmentConfig(): EnvironmentConfig {
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  return {
-    isProduction,
-    includeStackTrace: !isProduction,
-    includeDetails: !isProduction,
-    logLevel: isProduction ? 'error' : 'debug',
-  };
-}
-
-/**
  * Type guard to check if an object is an Error instance
  */
 export function isError(error: unknown): error is Error {
   return error instanceof Error;
-}
-
-/**
- * Type guard to check if an object has a message property
- */
-export function hasMessage(error: unknown): error is { message: string } {
-  return typeof error === 'object' && error !== null && 'message' in error;
 }
 
 /**
@@ -141,6 +119,10 @@ export class ApiError extends Error {
 
   static externalService(service: string, message: string): ApiError {
     return new ApiError(ErrorType.EXTERNAL_SERVICE, `${service} error: ${message}`, 502);
+  }
+
+  static rateLimited(message: string = 'Rate limit exceeded', retryAfter?: number): ApiError {
+    return ApiError.rateLimit(message, retryAfter);
   }
 
   static server(message: string = 'Internal server error'): ApiError {

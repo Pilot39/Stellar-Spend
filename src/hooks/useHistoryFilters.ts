@@ -53,6 +53,7 @@ export function applyHistoryFilters(
 }
 
 export interface UseHistoryFiltersResult {
+  /** Current filter state. */
   filters: HistoryFilters;
   /** Replace the whole filter set. */
   setFilters: (filters: HistoryFilters) => void;
@@ -62,6 +63,8 @@ export interface UseHistoryFiltersResult {
   resetFilters: () => void;
   /** The input list with filters + sort applied. */
   filtered: Transaction[];
+  /** Backwards-compatible alias for {@link filtered}. */
+  filteredTransactions: Transaction[];
 }
 
 /**
@@ -82,7 +85,17 @@ export function useHistoryFilters(
 
   const resetFilters = () => setFilters({ ...DEFAULT_HISTORY_FILTERS, ...initialFilters });
 
-  const filtered = useMemo(() => applyHistoryFilters(transactions, filters), [transactions, filters]);
+  const filtered = useMemo(
+    () => applyHistoryFilters(transactions, filters),
+    [transactions, filters],
+  );
 
-  return { filters, setFilters, updateFilters, resetFilters, filtered };
+  return {
+    filters,
+    setFilters,
+    updateFilters,
+    resetFilters,
+    filtered,
+    filteredTransactions: filtered,
+  };
 }

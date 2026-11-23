@@ -3,6 +3,7 @@
 import { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { Icon } from '@/components/Icon';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export interface AsyncBoundaryProps {
   isLoading: boolean;
@@ -46,29 +47,22 @@ export function AsyncBoundary({
   emptyClassName,
   errorClassName,
 }: AsyncBoundaryProps) {
-  if (isLoading && loadingContent) {
-    return (
-      <div className={cn('async-boundary-loading', loadingClassName, className)}>
-        {loadingContent}
-      </div>
-    );
-  }
-
-  if (error && errorContent) {
-    return (
-      <div role="alert" className={cn('async-boundary-error', errorClassName, className)}>
-        {errorContent(error)}
-      </div>
-    );
-  }
-
-  if (isEmpty && emptyContent) {
-    return (
-      <div className={cn('async-boundary-empty', emptyClassName, className)}>{emptyContent}</div>
-    );
-  }
-
-  return <>{children}</>;
+  return (
+    <ErrorBoundary
+      isLoading={isLoading}
+      isEmpty={isEmpty}
+      error={error}
+      loadingContent={loadingContent}
+      emptyContent={emptyContent}
+      errorContent={errorContent}
+      className={className}
+      loadingClassName={loadingClassName}
+      emptyClassName={emptyClassName}
+      errorClassName={errorClassName}
+    >
+      {children}
+    </ErrorBoundary>
+  );
 }
 
 /**
@@ -78,7 +72,7 @@ export function ListLoadingState({ rows = 5 }: { rows?: number }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-12 bg-[#222222] rounded animate-pulse" />
+        <Skeleton key={i} className="h-12 rounded" />
       ))}
     </div>
   );
@@ -100,18 +94,7 @@ export function ListEmptyState({
   icon,
   action,
 }: EmptyStateProps) {
-  return (
-    <div className="flex flex-col items-center justify-center py-12 px-4">
-      {icon && (
-        <div className="mb-4 text-[#333333]" aria-hidden="true">
-          {icon}
-        </div>
-      )}
-      <h3 className="text-sm font-semibold text-white mb-1">{title}</h3>
-      <p className="text-xs text-[#777777] mb-4">{description}</p>
-      {action}
-    </div>
-  );
+  return <Empty title={title} description={description} icon={icon} action={action} />;
 }
 
 /**
@@ -139,3 +122,5 @@ export function ListErrorState({ error, onRetry }: ErrorStateProps) {
     </div>
   );
 }
+
+export { ListLoadingState, ListEmptyState, ListErrorState };

@@ -1,6 +1,9 @@
 /**
  * Centralized rate-limiter service — consolidated version
  *
+ * @deprecated (#1539) Import from `@/lib/rate-limiter` (kebab-case) instead.
+ * This camelCase filename is kept for backwards compatibility only.
+ *
  * This file combines functionality from:
  *   • src/lib/rate-limiting.ts (InMemoryRateLimitStore, endpoint-based configs)
  *   • src/lib/rateLimiter.ts (SlidingWindowRateLimiter, namespace-based configs)
@@ -68,7 +71,10 @@ export interface RateLimitStore {
  * In-memory rate limit store (suitable for single-instance deployments)
  * This provides compatibility with the old rate-limiting.ts module
  */
-export class InMemoryRateLimitStore implements RateLimitStore {
+/** Upper bound on tracked keys in the in-memory store (#1461). */
+const MAX_IN_MEMORY_KEYS = 10_000;
+
+class InMemoryRateLimitStore implements RateLimitStore {
   private store: Map<string, { count: number; resetTime: number }> = new Map();
 
   async get(key: string): Promise<number> {
@@ -82,10 +88,25 @@ export class InMemoryRateLimitStore implements RateLimitStore {
   }
 
   async set(key: string, value: number, ttl: number): Promise<void> {
+    if (!this.store.has(key) && this.store.size >= MAX_IN_MEMORY_KEYS) {
+      this.evictExpired();
+      // Still full of live windows: drop the oldest so memory stays bounded (#1461).
+      if (this.store.size >= MAX_IN_MEMORY_KEYS) {
+        const oldest = this.store.keys().next().value;
+        if (oldest !== undefined) this.store.delete(oldest);
+      }
+    }
     this.store.set(key, {
       count: value,
       resetTime: Date.now() + ttl,
     });
+  }
+
+  private evictExpired(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.store) {
+      if (now > entry.resetTime) this.store.delete(key);
+    }
   }
 
   async increment(key: string, ttl: number): Promise<number> {
@@ -222,28 +243,28 @@ function makeLimiter(namespace: string): SlidingWindowRateLimiter {
 }
 
 /** Bridge build-transaction endpoint. */
-export const buildTxLimiter = makeLimiter('build-tx');
+const buildTxLimiter = makeLimiter('build-tx');
 
 /** Paycrest payout-order endpoint. */
-export const paycrestOrderLimiter = makeLimiter('paycrest-order');
+const paycrestOrderLimiter = makeLimiter('paycrest-order');
 
 /** Quote / FX quote endpoint. */
-export const quoteLimiter = makeLimiter('quote');
+const quoteLimiter = makeLimiter('quote');
 
 /** Global API limiter (fallback). */
-export const globalApiLimiter = makeLimiter('global');
+const globalApiLimiter = makeLimiter('global');
 
 /** Offramp status polling. */
-export const offrampStatusLimiter = makeLimiter('offramp-status');
+const offrampStatusLimiter = makeLimiter('offramp-status');
 
 /** Transaction read endpoints. */
-export const transactionsReadLimiter = makeLimiter('transactions-read');
+const transactionsReadLimiter = makeLimiter('transactions-read');
 
 /** Transaction write endpoints. */
-export const transactionsWriteLimiter = makeLimiter('transactions-write');
+const transactionsWriteLimiter = makeLimiter('transactions-write');
 
 /** Auth / 2FA endpoints. */
-export const authLimiter = makeLimiter('auth-2fa');
+const authLimiter = makeLimiter('auth-2fa');
 
 // ── Key extraction helpers ────────────────────────────────────────────────────
 
@@ -331,7 +352,6 @@ export async function applyRateLimit(
   return null;
 }
 
-
 // ── Endpoint-based rate limiting (compatibility with old rate-limiting.ts) ───
 
 /**
@@ -397,7 +417,9 @@ export const RATE_LIMIT_CONFIGS: Record<string, { windowMs: number; maxRequests:
 /**
  * Get rate limit config for an endpoint
  */
-export function getRateLimitConfig(endpoint: string): { windowMs: number; maxRequests: number } | null {
+export function getRateLimitConfig(
+  endpoint: string,
+): { windowMs: number; maxRequests: number } | null {
   // Exact match
   if (RATE_LIMIT_CONFIGS[endpoint]) {
     return RATE_LIMIT_CONFIGS[endpoint];
@@ -430,7 +452,7 @@ export function generateRateLimitKey(
  * Check if request should be rate limited
  * This provides compatibility with the old rate-limiting.ts module
  */
-export async function checkRateLimit(
+async function checkRateLimit(
   store: RateLimitStore,
   endpoint: string,
   identifier: string,

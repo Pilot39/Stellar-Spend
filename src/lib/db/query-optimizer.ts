@@ -188,6 +188,86 @@ export class QueryOptimizer {
 
 export const queryOptimizer = new QueryOptimizer();
 
+export interface IndexCandidate {
+  query: string;
+  whereColumns: string[];
+  avgExecutionTime: number;
+  count: number;
+  maxExecutionTime: number;
+}
+
+/**
+ * Extract column names referenced in a WHERE clause of a normalized query.
+ * Best-effort parsing intended to help justify index creation.
+ */
+export function extractWhereColumns(query: string): string[] {
+  const whereMatch = query.match(
+    /\bWHERE\b([\s\S]*?)(?:\bGROUP\b|\bORDER\b|\bLIMIT\b|\bRETURNING\b|$)/i,
+  );
+  if (!whereMatch) {
+    return [];
+  }
+
+  const whereClause = whereMatch[1];
+  const columns = new Set<string>();
+
+  // Match simple column references like "col", "table.col", "col = $N", "col IN (...)"
+  const columnPattern =
+    /\b([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?)\b(?=\s*(?:=|<|>|<=|>=|<>|!=|\bLIKE\b|\bIN\b|\bIS\b|\bBETWEEN\b))/gi;
+  let match: RegExpExecArray | null;
+  while ((match = columnPattern.exec(whereClause)) !== null) {
+    const candidate = match[1];
+    const upper = candidate.toUpperCase();
+    if (upper === 'AND' || upper === 'OR' || upper === 'NOT' || upper === 'NULL') {
+      continue;
+    }
+    columns.add(candidate);
+  }
+
+  return Array.from(columns);
+}
+
+/**
+ * Build a report of slow queries suitable for justifying index creation.
+ * Returns normalized queries with their WHERE columns and average execution time,
+ * sorted by average execution time descending.
+ */
+export function getIndexCandidates(limit = 20): IndexCandidate[] {
+  const slowQueries = queryOptimizer.getSlowQueries(1000);
+  const groups = new Map<
+    string,
+    { totalTime: number; count: number; maxTime: number; whereColumns: string[] }
+  >();
+
+  for (const metric of slowQueries) {
+    const whereColumns = extractWhereColumns(metric.query);
+    if (whereColumns.length === 0) {
+      continue;
+    }
+    const group = groups.get(metric.query) || {
+      totalTime: 0,
+      count: 0,
+      maxTime: 0,
+      whereColumns,
+    };
+    group.totalTime += metric.executionTime;
+    group.count++;
+    group.maxTime = Math.max(group.maxTime, metric.executionTime);
+    groups.set(metric.query, group);
+  }
+
+  return Array.from(groups.entries())
+    .map(([query, group]) => ({
+      query,
+      whereColumns: group.whereColumns,
+      avgExecutionTime: group.totalTime / group.count,
+      count: group.count,
+      maxExecutionTime: group.maxTime,
+    }))
+    .sort((a, b) => b.avgExecutionTime - a.avgExecutionTime)
+    .slice(0, limit);
+}
+
 /**
  * Middleware to record query metrics
  */

@@ -1,40 +1,18 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { PriceAlertStorage } from '@/lib/price-alerts';
 import type { NotificationDeliveryRecord } from '@/lib/notifications';
 import { logger } from '@/lib/logger';
+import { startNotificationPolling } from '@/lib/notifications/polling';
 import { formatNumber } from '@/lib/format';
+import {
+  useNotificationContext,
+  type NotificationCenterEvent,
+  type NotificationCenterEventType,
+} from '@/components/NotificationProvider';
 
-export type NotificationCenterEventType =
-  | 'price_alert'
-  | 'transaction_update'
-  | 'tier_change'
-  | 'payout_update';
-
-export interface NotificationCenterEvent {
-  id: string;
-  type: NotificationCenterEventType;
-  title: string;
-  description: string;
-  read: boolean;
-  createdAt: number;
-  link?: {
-    href: string;
-    label: string;
-  };
-  metadata?: Record<string, unknown>;
-}
-
-interface NotificationCenterState {
-  events: NotificationCenterEvent[];
-  unreadCount: number;
-  loading: boolean;
-  error: string | null;
-}
-
-const STORAGE_KEY = 'stellar_spend_notification_center';
-const MAX_EVENTS = 100;
+export type { NotificationCenterEvent, NotificationCenterEventType };
 
 /**
  * useNotificationCenter
@@ -45,137 +23,25 @@ const MAX_EVENTS = 100;
  * - Payout status updates (from polling/transaction-timeout.ts)
  * - Tier changes (custom events)
  *
- * Manages read/unread state with localStorage persistence.
- * Provides deep links to relevant contexts.
+ * State, persistence and read/unread handling are delegated to the shared
+ * reducer/context in NotificationProvider. This hook only aggregates events
+ * from the various sources and forwards them to the context.
  */
-export function useNotificationCenter(userAddress: string | null) {
-  const [state, setState] = useState<NotificationCenterState>({
-    events: [],
-    unreadCount: 0,
-    loading: true,
-    error: null,
-  });
-
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Load persisted events from localStorage
-  const loadPersistedEvents = useCallback(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const events: NotificationCenterEvent[] = JSON.parse(stored);
-        return events.sort((a, b) => b.createdAt - a.createdAt);
-      }
-    } catch (err) {
-      logger.error('notification_center.load_persisted_failed', {}, err);
-    }
-    return [];
-  }, []);
-
-  // Save events to localStorage
-  const persistEvents = useCallback((events: NotificationCenterEvent[]) => {
-    if (typeof window === 'undefined') return;
-    try {
-      // Keep only the most recent MAX_EVENTS
-      const toSave = events.slice(0, MAX_EVENTS);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-    } catch (err) {
-      logger.error('notification_center.persist_failed', {}, err);
-    }
-  }, []);
-
-  // Add or update an event
-  const addEvent = useCallback(
-    (event: NotificationCenterEvent) => {
-      setState((prev) => {
-        // Check if event already exists (by id)
-        const existingIndex = prev.events.findIndex((e) => e.id === event.id);
-        let updatedEvents: NotificationCenterEvent[];
-
-        if (existingIndex >= 0) {
-          // Update existing event
-          updatedEvents = [...prev.events];
-          updatedEvents[existingIndex] = event;
-        } else {
-          // Add new event at the beginning
-          updatedEvents = [event, ...prev.events].slice(0, MAX_EVENTS);
-        }
-
-        // Calculate unread count
-        const unreadCount = updatedEvents.filter((e) => !e.read).length;
-
-        // Persist to localStorage
-        persistEvents(updatedEvents);
-
-        return {
-          ...prev,
-          events: updatedEvents,
-          unreadCount,
-        };
-      });
-    },
-    [persistEvents],
-  );
-
-  // Mark event as read
-  const markAsRead = useCallback(
-    (eventId: string) => {
-      setState((prev) => {
-        const updatedEvents = prev.events.map((e) => (e.id === eventId ? { ...e, read: true } : e));
-        const unreadCount = updatedEvents.filter((e) => !e.read).length;
-        persistEvents(updatedEvents);
-
-        return {
-          ...prev,
-          events: updatedEvents,
-          unreadCount,
-        };
-      });
-    },
-    [persistEvents],
-  );
-
-  // Mark all as read
-  const markAllAsRead = useCallback(() => {
-    setState((prev) => {
-      const updatedEvents = prev.events.map((e) => ({ ...e, read: true }));
-      persistEvents(updatedEvents);
-      return {
-        ...prev,
-        events: updatedEvents,
-        unreadCount: 0,
-      };
-    });
-  }, [persistEvents]);
-
-  // Remove an event
-  const removeEvent = useCallback(
-    (eventId: string) => {
-      setState((prev) => {
-        const updatedEvents = prev.events.filter((e) => e.id !== eventId);
-        const unreadCount = updatedEvents.filter((e) => !e.read).length;
-        persistEvents(updatedEvents);
-
-        return {
-          ...prev,
-          events: updatedEvents,
-          unreadCount,
-        };
-      });
-    },
-    [persistEvents],
-  );
-
-  // Clear all events
-  const clearAll = useCallback(() => {
-    persistEvents([]);
-    setState((prev) => ({
-      ...prev,
-      events: [],
-      unreadCount: 0,
-    }));
-  }, [persistEvents]);
+function useNotificationCenter(userAddress: string | null) {
+  const {
+    events,
+    unreadCount,
+    loading,
+    error,
+    markAsRead,
+    markAllAsRead,
+    removeEvent,
+    clearAll,
+    addEvent,
+    addTierChangeEvent: addTierChangeEventToContext,
+    initialize,
+    setError,
+  } = useNotificationContext();
 
   // Aggregate price alerts from storage
   const aggregatePriceAlerts = useCallback(() => {
@@ -310,87 +176,44 @@ export function useNotificationCenter(userAddress: string | null) {
   // Aggregate tier changes
   const addTierChangeEvent = useCallback(
     (tier: string, previousTier?: string) => {
-      const event: NotificationCenterEvent = {
-        id: `tier-change-${Date.now()}`,
-        type: 'tier_change',
-        title: 'Tier Changed',
-        description: `Your tier has been ${previousTier ? `upgraded from ${previousTier} to ${tier}` : `set to ${tier}`}`,
-        read: false,
-        createdAt: Date.now(),
-        link: {
-          href: '/account/tier',
-          label: 'View Tier Details',
-        },
-        metadata: {
-          tier,
-          previousTier,
-        },
-      };
-
-      addEvent(event);
+      addTierChangeEventToContext(tier, previousTier);
     },
-    [addEvent],
+    [addTierChangeEventToContext],
   );
 
   // Initialize and load persisted events
   useEffect(() => {
     if (!userAddress) {
-      setState((prev) => ({
-        ...prev,
-        loading: false,
-        error: 'No user address provided',
-      }));
+      setError('No user address provided');
       return;
     }
 
     try {
-      // Load persisted events
-      const persisted = loadPersistedEvents();
-      const unreadCount = persisted.filter((e) => !e.read).length;
-
-      setState((prev) => ({
-        ...prev,
-        events: persisted,
-        unreadCount,
-        loading: false,
-        error: null,
-      }));
-
+      initialize();
       // Aggregate current events from sources
       aggregatePriceAlerts();
     } catch (err) {
-      setState((prev) => ({
-        ...prev,
-        loading: false,
-        error: err instanceof Error ? err.message : 'Failed to load events',
-      }));
+      setError(err instanceof Error ? err.message : 'Failed to load events');
     }
-  }, [userAddress, loadPersistedEvents, aggregatePriceAlerts]);
+  }, [userAddress, initialize, aggregatePriceAlerts, setError]);
 
-  // Poll for new events periodically
+  // Poll for new events periodically (timer lives in lib/notifications)
   useEffect(() => {
     if (!userAddress) return;
-
-    const pollForUpdates = () => {
-      aggregatePriceAlerts();
-      // Additional polling for transaction updates would go here
-    };
-
-    // Poll every 30 seconds for new events
-    pollIntervalRef.current = setInterval(pollForUpdates, 30000);
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-    };
+    return startNotificationPolling(() => aggregatePriceAlerts());
   }, [userAddress, aggregatePriceAlerts]);
 
   // Format unread badge text (show "99+" for counts > 99)
-  const unreadBadgeText = state.unreadCount > 99 ? '99+' : String(state.unreadCount);
+  const unreadBadgeText = useMemo(
+    () => (unreadCount > 99 ? '99+' : String(unreadCount)),
+    [unreadCount],
+  );
 
   return {
-    ...state,
+    events,
+    unreadCount,
+    loading,
+    error,
     markAsRead,
     markAllAsRead,
     removeEvent,
@@ -400,5 +223,10 @@ export function useNotificationCenter(userAddress: string | null) {
     aggregateTransactionUpdates,
     aggregatePayoutUpdates,
     unreadBadgeText,
+    // Backwards-compatible aliases
+    badgeText: unreadBadgeText,
+    unread: state.unreadCount,
   };
 }
+
+export default useNotificationCenter;

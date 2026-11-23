@@ -1,3 +1,72 @@
+import { z } from 'zod';
+
+const STELLAR_ADDRESS_REGEX = /^G[A-Z0-9]{55}$/;
+const EVM_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
+const AMOUNT_REGEX = /^\d*\.?\d*$/;
+
+/**
+ * Zod schema for a positive decimal amount string (e.g. "10", "10.5").
+ * Mirrors {@link validateAmount} semantics.
+ */
+export const amountSchema = z
+  .string()
+  .trim()
+  .min(1, 'Amount is required')
+  .refine((value) => AMOUNT_REGEX.test(value), 'Amount must be a valid decimal number')
+  .refine((value) => value !== '.', 'Amount must be a valid decimal number')
+  .refine((value) => {
+    const num = parseFloat(value);
+    return !isNaN(num) && isFinite(num) && num > 0;
+  }, 'Amount must be greater than zero');
+
+/** Zod schema for a supported payout currency code. */
+export const currencySchema = z
+  .string()
+  .trim()
+  .min(1, 'Currency is required')
+  .max(10, 'Currency is too long')
+  .regex(/^[A-Za-z]{2,10}$/, 'Currency must be alphabetic');
+
+/** Zod schema for a beneficiary name. */
+export const beneficiarySchema = z
+  .string()
+  .trim()
+  .min(1, 'Beneficiary is required')
+  .max(100, 'Beneficiary is too long');
+
+/** Zod schema for a Stellar or Base address. */
+export const addressSchema = z
+  .string()
+  .trim()
+  .refine(
+    (value) => STELLAR_ADDRESS_REGEX.test(value) || EVM_ADDRESS_REGEX.test(value),
+    'Invalid address',
+  );
+
+/** Zod schema for a chain discriminator. */
+export const chainSchema = z.enum(['stellar', 'base']);
+
+/** Request body schema for the offramp quote route. */
+export const quoteRequestSchema = z.object({
+  amount: amountSchema,
+  currency: currencySchema,
+  chain: chainSchema,
+  address: addressSchema,
+});
+
+/** Request body schema for the offramp execute-payout route. */
+export const executePayoutRequestSchema = z.object({
+  quoteId: z.string().trim().min(1, 'Quote ID is required'),
+  amount: amountSchema,
+  currency: currencySchema,
+  beneficiary: beneficiarySchema,
+  address: addressSchema,
+  chain: chainSchema,
+});
+
+export type QuoteRequest = z.infer<typeof quoteRequestSchema>;
+export type ExecutePayoutRequest = z.infer<typeof executePayoutRequestSchema>;
+
 export function validateAmount(amount: string): boolean {
   if (!/^\d*\.?\d*$/.test(amount.trim()) || amount.trim() === '' || amount.trim() === '.')
     return false;
@@ -7,25 +76,9 @@ export function validateAmount(amount: string): boolean {
 
 export function validateAddress(address: string, chain: 'stellar' | 'base'): boolean {
   if (!address) return false;
-  if (chain === 'stellar') return /^G[A-Z0-9]{55}$/.test(address);
-  if (chain === 'base') return /^0x[a-fA-F0-9]{40}$/.test(address);
+  if (chain === 'stellar') return STELLAR_ADDRESS_REGEX.test(address);
+  if (chain === 'base') return EVM_ADDRESS_REGEX.test(address);
   return false;
-}
-
-export function validateEvmAddress(address: string): boolean {
-  return /^0x[a-fA-F0-9]{40}$/.test(address);
-}
-
-export function validateAccountNumber(accountNumber: string): boolean {
-  return /^\d{10}$/.test(accountNumber);
-}
-
-export function sanitizeInput(input: string): string {
-  return input.trim().replace(/[^\w\s.-]/g, '');
-}
-
-export function validateToken(token: string): boolean {
-  return ['USDC', 'USDT'].includes(token.toUpperCase());
 }
 
 export function isValidQuote(data: unknown): data is {

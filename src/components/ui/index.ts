@@ -14,7 +14,17 @@ export { Input, inputVariants } from './Input';
 export type { InputProps } from './Input';
 
 export { Label } from './Label';
+
+/**
+ * Shared loading/empty-state primitives (issue #1441).
+ * `Skeleton` is the single loading placeholder; `Empty` is the single
+ * empty-state component. Use these instead of one-off implementations.
+ */
 export { Skeleton } from './Skeleton';
+export type { SkeletonProps } from './Skeleton';
+
+export { Empty } from './Empty';
+export type { EmptyProps } from './Empty';
 
 /**
  * Shared loading/error/empty pattern for list & data views (issue #933).

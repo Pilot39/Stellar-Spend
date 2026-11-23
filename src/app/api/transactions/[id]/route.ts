@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { dal, DatabaseError } from '@/lib/db';
 import { ErrorHandler } from '@/lib/error-handler';
 import { withIdempotency } from '@/lib/idempotency';
-import { notifyTransactionStatusUpdate } from '@/lib/notifications';
-import { validateBody } from '@/lib/validation/validate-request';
-import type { Transaction } from '@/lib/transaction-storage';
+import { validateBody, validateParams } from '@/lib/validation/validate-request';
+import { updateTransaction } from '@/lib/services/transactions-service';
+
+const idParamsSchema = z.object({ id: z.string().min(1) });
 
 // Unknown fields are intentionally kept (passthrough): the DAL's update()
 // already whitelists which columns it writes, this schema only needs to
@@ -44,34 +44,21 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   return withIdempotency(
     request,
     async () => {
-      const { id } = await params;
+      const paramsValidation = validateParams(await params, idParamsSchema);
+      if (!paramsValidation.success) return paramsValidation.response;
+      const { id } = paramsValidation.data;
 
       const validation = await validateBody(request, updateTransactionSchema);
       if (!validation.success) return validation.response;
       const body = validation.data;
 
       try {
-        const existing = await dal.getById(id);
-        if (!existing) {
+        const updated = await updateTransaction(id, body);
+        if (!updated) {
           return ErrorHandler.notFound('transaction');
-        }
-
-        await dal.update(id, body as unknown as Partial<Transaction>);
-
-        const updated = await dal.getById(id);
-        if (updated) {
-          await notifyTransactionStatusUpdate({
-            transaction: updated,
-            previousStatus: existing.status,
-            previousPayoutStatus: existing.payoutStatus,
-            source: 'manual_update',
-          });
         }
         return NextResponse.json(updated, { status: 200 });
       } catch (err) {
-        if (err instanceof DatabaseError) {
-          return ErrorHandler.serverError(err);
-        }
         return ErrorHandler.serverError(err);
       }
     },

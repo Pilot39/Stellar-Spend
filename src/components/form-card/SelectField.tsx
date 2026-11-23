@@ -41,8 +41,10 @@ export function SelectField({
           onChange={(e: ChangeEvent<HTMLSelectElement>) => onChange(e.target.value)}
           onBlur={onBlur}
           disabled={disabled || loading}
+          aria-label={label}
           aria-invalid={showError ? 'true' : undefined}
           aria-describedby={showError ? `${id}-error` : undefined}
+          aria-busy={loading ? 'true' : undefined}
           className={cn(
             'w-full appearance-none bg-[#0a0a0a] border px-3 py-2.5 text-sm',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c9a962] focus:border-[#c9a962]',
@@ -61,7 +63,10 @@ export function SelectField({
             </option>
           ))}
         </select>
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#777777] text-xs">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#777777] text-xs"
+        >
           ▾
         </span>
       </div>

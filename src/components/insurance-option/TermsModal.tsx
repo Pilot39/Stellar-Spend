@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/cn';
 import { useI18n } from '@/lib/i18n';
 import { PROVIDER_LABELS, PROVIDER_DESCRIPTIONS } from './types';
@@ -9,31 +9,72 @@ export interface TermsModalProps {
   onClose: () => void;
 }
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function TermsModal({ onClose }: TermsModalProps) {
   const { t } = useI18n();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeButtonRef.current?.focus();
+
     const handler = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+
+      const container = dialogRef.current;
+      if (!container) return;
+      const focusable = Array.from(
+        container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (e.shiftKey) {
+        if (active === first || !container.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !container.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
+
     document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    return () => {
+      document.removeEventListener('keydown', handler);
+      previouslyFocused?.focus?.();
+    };
   }, [onClose]);
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="insurance-terms-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      <div className="relative z-10 w-full max-w-lg border border-[#333333] bg-[#0a0a0a] p-6 flex flex-col gap-5 max-h-[80vh] overflow-y-auto">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="insurance-terms-title"
+        className="relative z-10 w-full max-w-lg border border-[#333333] bg-[#0a0a0a] p-6 flex flex-col gap-5 max-h-[80vh] overflow-y-auto"
+      >
         <div className="flex items-start justify-between gap-4">
           <h2
             id="insurance-terms-title"
@@ -42,6 +83,8 @@ export function TermsModal({ onClose }: TermsModalProps) {
             {t('insurance.terms_title')}
           </h2>
           <button
+            ref={closeButtonRef}
+            type="button"
             onClick={onClose}
             aria-label="Close terms"
             className="text-[#777777] hover:text-white transition-colors duration-150 flex-shrink-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c9a962]"
@@ -112,6 +155,7 @@ export function TermsModal({ onClose }: TermsModalProps) {
         </div>
 
         <button
+          type="button"
           onClick={onClose}
           className={cn(
             'mt-2 w-full py-2.5 min-h-[44px] text-xs tracking-widest border border-[#c9a962]',

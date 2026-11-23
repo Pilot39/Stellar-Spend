@@ -117,8 +117,12 @@ export const quoteRouteSchema = z.object({
 
 // Paycrest order request schema
 export const paycrestOrderRouteSchema = z.object({
-  amount: z.number({ invalid_type_error: 'amount must be a number' }).positive('amount must be a positive number'),
-  rate: z.number({ invalid_type_error: 'rate must be a number' }).positive('rate must be a positive number'),
+  amount: z
+    .number({ invalid_type_error: 'amount must be a number' })
+    .positive('amount must be a positive number'),
+  rate: z
+    .number({ invalid_type_error: 'rate must be a number' })
+    .positive('rate must be a positive number'),
   token: z.string().min(1, 'token is required'),
   network: z.string().min(1, 'network is required'),
   reference: z.string().min(1, 'reference is required'),
@@ -143,7 +147,9 @@ export const bulkPayoutItemSchema = z.object({
   beneficiaryInstitution: z.string().min(1, 'beneficiaryInstitution is required'),
   beneficiaryAccount: z.string().min(1, 'beneficiaryAccount is required'),
   beneficiaryName: z.string().min(1, 'beneficiaryName is required'),
-  amount: z.number({ invalid_type_error: 'amount must be a number' }).positive('amount must be positive'),
+  amount: z
+    .number({ invalid_type_error: 'amount must be a number' })
+    .positive('amount must be positive'),
   currency: z.string().min(1, 'currency is required'),
 });
 
@@ -153,6 +159,44 @@ export const createBulkPayoutSchema = z.object({
   idempotencyKey: z.string().min(1, 'idempotencyKey is required'),
   items: z.array(bulkPayoutItemSchema).min(1, 'items must be a non-empty array'),
 });
+
+// Insurance claim schema
+export const CLAIM_REASONS = [
+  'Transaction failed - funds not delivered',
+  'Incorrect amount received',
+  'Transaction reversed without refund',
+  'Fraudulent or unauthorized transaction',
+  'Technical error during processing',
+  'Other',
+] as const;
+
+export const insuranceClaimSchema = z.object({
+  reason: z
+    .string()
+    .min(1, 'Please select a reason')
+    .refine(
+      (val) => (CLAIM_REASONS as readonly string[]).includes(val),
+      `Reason must be one of: ${CLAIM_REASONS.join(', ')}`,
+    ),
+  evidence: z.string().max(2000, 'Evidence must be 2000 characters or less').optional(),
+});
+
+export type InsuranceClaimInput = z.infer<typeof insuranceClaimSchema>;
+
+// Insurance claim server-side patch schema (also requires insuranceId)
+export const insuranceClaimPatchSchema = z.object({
+  insuranceId: z.string().min(1, 'insuranceId is required'),
+  reason: z
+    .string()
+    .min(1, 'reason is required')
+    .refine(
+      (val) => (CLAIM_REASONS as readonly string[]).includes(val),
+      `Reason must be one of: ${CLAIM_REASONS.join(', ')}`,
+    ),
+  evidence: z.string().max(2000, 'Evidence must be 2000 characters or less').optional(),
+});
+
+export type InsuranceClaimPatchInput = z.infer<typeof insuranceClaimPatchSchema>;
 
 // Queue manage action schema
 export const queueManageSchema = z.discriminatedUnion('action', [
@@ -216,5 +260,8 @@ export function parseBody<T>(
   if (result.valid && result.data !== undefined) {
     return { ok: true, data: result.data };
   }
-  return { ok: false, errors: result.errors ?? [{ field: 'unknown', message: 'Validation failed' }] };
+  return {
+    ok: false,
+    errors: result.errors ?? [{ field: 'unknown', message: 'Validation failed' }],
+  };
 }

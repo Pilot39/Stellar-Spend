@@ -26,10 +26,12 @@ import {
   useState,
   useCallback,
   useEffect,
+  useReducer,
   useRef,
   type ReactNode,
 } from 'react';
 import { logger } from '@/lib/logger';
+import { randomHex } from '@/lib/crypto/ids';
 import { PriceAlertStorage } from '@/lib/price-alerts';
 import { formatNumber } from '@/lib/format';
 
@@ -70,7 +72,31 @@ export interface NotificationEvent {
 // Unified context value
 // ---------------------------------------------------------------------------
 
-interface NotificationContextValue {
+/**
+ * Shape of the value exposed by {@link NotificationContext}.
+ *
+ * The context intentionally merges two previously separate surfaces:
+ *
+ * - **Toast API** (`toasts`, `showToast`, `removeToast`) — transient banners
+ *   that auto-dismiss after {@link TOAST_TTL_MS}. No persistence.
+ * - **Notification-center API** (`events`, `unreadCount`, `unreadBadgeText`,
+ *   `notificationLoading`, `addEvent`, `markAsRead`, `markAllAsRead`,
+ *   `removeEvent`, `clearAll`, `addTierChangeEvent`) — a persistent event log
+ *   backed by `localStorage` under {@link STORAGE_KEY} and capped at
+ *   {@link MAX_EVENTS} entries.
+ *
+ * Consumers should prefer the narrow hooks ({@link useToast},
+ * {@link useNotificationEvents}) unless they genuinely need both surfaces.
+ *
+ * @example
+ * ```tsx
+ * function CopyButton() {
+ *   const { showToast } = useToast();
+ *   return <button onClick={() => showToast('Copied!', 'success')}>Copy</button>;
+ * }
+ * ```
+ */
+export interface NotificationContextValue {
   // ----- Toast API -----
   toasts: Toast[];
   /** Show a transient toast banner. */
@@ -101,6 +127,92 @@ const STORAGE_KEY = 'stellar_spend_notification_center';
 const MAX_EVENTS = 100;
 
 // ---------------------------------------------------------------------------
+// Notification-center reducer (#1428)
+// ---------------------------------------------------------------------------
+
+export interface NotificationState {
+  events: NotificationEvent[];
+  unreadCount: number;
+  loading: boolean;
+  error: string | null;
+}
+
+export type NotificationAction =
+  | { type: 'LOAD_START' }
+  | { type: 'LOAD_SUCCESS'; events: NotificationEvent[] }
+  | { type: 'LOAD_ERROR'; error: string }
+  | { type: 'ADD_EVENT'; event: NotificationEvent }
+  | { type: 'MARK_AS_READ'; eventId: string }
+  | { type: 'MARK_ALL_AS_READ' }
+  | { type: 'REMOVE_EVENT'; eventId: string }
+  | { type: 'CLEAR_ALL' };
+
+export const initialNotificationState: NotificationState = {
+  events: [],
+  unreadCount: 0,
+  loading: true,
+  error: null,
+};
+
+/** Sort newest-first and cap the event list. */
+function normalizeEvents(events: NotificationEvent[]): NotificationEvent[] {
+  return [...events].sort((a, b) => b.createdAt - a.createdAt).slice(0, MAX_EVENTS);
+}
+
+function withDerived(state: NotificationState, events: NotificationEvent[]): NotificationState {
+  const normalized = normalizeEvents(events);
+  return {
+    ...state,
+    events: normalized,
+    unreadCount: normalized.filter((e) => !e.read).length,
+  };
+}
+
+/**
+ * Pure reducer for notification-center state. Exported for unit testing.
+ */
+export function notificationReducer(
+  state: NotificationState,
+  action: NotificationAction,
+): NotificationState {
+  switch (action.type) {
+    case 'LOAD_START':
+      return { ...state, loading: true, error: null };
+    case 'LOAD_SUCCESS':
+      return withDerived({ ...state, loading: false, error: null }, action.events);
+    case 'LOAD_ERROR':
+      return { ...state, loading: false, error: action.error };
+    case 'ADD_EVENT': {
+      const idx = state.events.findIndex((e) => e.id === action.event.id);
+      const next =
+        idx >= 0
+          ? state.events.map((e, i) => (i === idx ? action.event : e))
+          : [action.event, ...state.events];
+      return withDerived(state, next);
+    }
+    case 'MARK_AS_READ':
+      return withDerived(
+        state,
+        state.events.map((e) => (e.id === action.eventId ? { ...e, read: true } : e)),
+      );
+    case 'MARK_ALL_AS_READ':
+      return withDerived(
+        state,
+        state.events.map((e) => (e.read ? e : { ...e, read: true })),
+      );
+    case 'REMOVE_EVENT':
+      return withDerived(
+        state,
+        state.events.filter((e) => e.id !== action.eventId),
+      );
+    case 'CLEAR_ALL':
+      return withDerived(state, []);
+    default:
+      return state;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Context
 // ---------------------------------------------------------------------------
 
@@ -110,6 +222,19 @@ const NotificationContext = createContext<NotificationContextValue | undefined>(
 // Provider
 // ---------------------------------------------------------------------------
 
+/**
+ * Single provider for all notification surfaces.
+ *
+ * Mount this once near the app root (it is wired up by `AppProviders`).
+ * Do not nest additional `NotificationProvider` instances — the toast queue
+ * and persisted event log are global, and a nested provider would create a
+ * second, divergent copy of that state.
+ *
+ * @param props.children    React subtree that may consume the context.
+ * @param props.userAddress Wallet address used to scope persisted events and
+ *                          to enable price-alert polling. When `null`, the
+ *                          notification center stays empty and idle.
+ */
 export function NotificationProvider({
   children,
   /** Wallet address — required to load persisted events for this user. */
@@ -122,7 +247,7 @@ export function NotificationProvider({
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const showToast = useCallback((message: string, type: ToastType = 'info') => {
-    const id = Math.random().toString(36).substring(2, 9);
+    const id = randomHex(6);
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -133,9 +258,9 @@ export function NotificationProvider({
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // --- Notification-center state ---
-  const [events, setEvents] = useState<NotificationEvent[]>([]);
-  const [notificationLoading, setNotificationLoading] = useState(true);
+  // --- Notification-center state (reducer-driven, #1428) ---
+  const [state, dispatch] = useReducer(notificationReducer, initialNotificationState);
+  const { events, unreadCount, loading: notificationLoading } = state;
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Persist events to localStorage
@@ -153,62 +278,39 @@ export function NotificationProvider({
     if (typeof window === 'undefined') return [];
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return (JSON.parse(raw) as NotificationEvent[]).sort((a, b) => b.createdAt - a.createdAt);
+      if (raw)
+        return (JSON.parse(raw) as NotificationEvent[]).sort((a, b) => b.createdAt - a.createdAt);
     } catch (err) {
       logger.error('notification_provider.load_failed', {}, err);
     }
     return [];
   }, []);
 
-  // Add or update a single event
-  const addEvent = useCallback(
-    (event: NotificationEvent) => {
-      setEvents((prev) => {
-        const idx = prev.findIndex((e) => e.id === event.id);
-        const next = idx >= 0
-          ? prev.map((e, i) => (i === idx ? event : e))
-          : [event, ...prev].slice(0, MAX_EVENTS);
-        persistEvents(next);
-        return next;
-      });
-    },
-    [persistEvents],
-  );
+  // Persist whenever the event list changes (single source of truth)
+  useEffect(() => {
+    persistEvents(events);
+  }, [events, persistEvents]);
 
-  const markAsRead = useCallback(
-    (eventId: string) => {
-      setEvents((prev) => {
-        const next = prev.map((e) => (e.id === eventId ? { ...e, read: true } : e));
-        persistEvents(next);
-        return next;
-      });
-    },
-    [persistEvents],
-  );
+  // Add or update a single event
+  const addEvent = useCallback((event: NotificationEvent) => {
+    dispatch({ type: 'ADD_EVENT', event });
+  }, []);
+
+  const markAsRead = useCallback((eventId: string) => {
+    dispatch({ type: 'MARK_AS_READ', eventId });
+  }, []);
 
   const markAllAsRead = useCallback(() => {
-    setEvents((prev) => {
-      const next = prev.map((e) => ({ ...e, read: true }));
-      persistEvents(next);
-      return next;
-    });
-  }, [persistEvents]);
+    dispatch({ type: 'MARK_ALL_AS_READ' });
+  }, []);
 
-  const removeEvent = useCallback(
-    (eventId: string) => {
-      setEvents((prev) => {
-        const next = prev.filter((e) => e.id !== eventId);
-        persistEvents(next);
-        return next;
-      });
-    },
-    [persistEvents],
-  );
+  const removeEvent = useCallback((eventId: string) => {
+    dispatch({ type: 'REMOVE_EVENT', eventId });
+  }, []);
 
   const clearAll = useCallback(() => {
-    persistEvents([]);
-    setEvents([]);
-  }, [persistEvents]);
+    dispatch({ type: 'CLEAR_ALL' });
+  }, []);
 
   const addTierChangeEvent = useCallback(
     (tier: string, previousTier?: string) => {
@@ -261,17 +363,17 @@ export function NotificationProvider({
   // Initialise events from storage + aggregate price alerts
   useEffect(() => {
     if (!userAddress) {
-      setNotificationLoading(false);
+      dispatch({ type: 'LOAD_SUCCESS', events: [] });
       return;
     }
+    dispatch({ type: 'LOAD_START' });
     try {
       const persisted = loadEvents();
-      setEvents(persisted);
+      dispatch({ type: 'LOAD_SUCCESS', events: persisted });
       aggregatePriceAlerts();
     } catch (err) {
       logger.error('notification_provider.init_failed', {}, err);
-    } finally {
-      setNotificationLoading(false);
+      dispatch({ type: 'LOAD_ERROR', error: 'Failed to load notifications' });
     }
   }, [userAddress, loadEvents, aggregatePriceAlerts]);
 
@@ -284,7 +386,6 @@ export function NotificationProvider({
     };
   }, [userAddress, aggregatePriceAlerts]);
 
-  const unreadCount = events.filter((e) => !e.read).length;
   const unreadBadgeText = unreadCount > 99 ? '99+' : String(unreadCount);
 
   return (
@@ -364,10 +465,10 @@ export function useNotificationEvents() {
 }
 
 // ---------------------------------------------------------------------------
-// Backward-compat re-exports (keep existing imports from ToastContext working)
-// These can be removed once all call sites use useNotification/useToast
-// from this file.
+// Backward-compat notes
+//
+// The legacy `ToastProvider` / `useToast` aliases are preserved by keeping the
+// `NotificationProvider` and `useToast` export names stable. The former
+// standalone `ToastContext` provider has been removed; all call sites should
+// import from this module. No additional re-exports are needed.
 // ---------------------------------------------------------------------------
-
-/** @deprecated Import useToast from NotificationProvider instead */
-export { useToast as useToastCompat };

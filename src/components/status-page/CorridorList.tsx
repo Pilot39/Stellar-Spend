@@ -7,16 +7,22 @@ export interface CorridorListProps {
 
 export function CorridorList({ corridors }: CorridorListProps) {
   return (
-    <div className="border border-[#333] bg-[#111] p-6 space-y-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wider">Payment Corridors</h2>
-      <div className="space-y-3">
+    <section
+      aria-labelledby="corridor-list-heading"
+      className="border border-[#333] bg-[#111] p-6 space-y-4"
+    >
+      <h2 id="corridor-list-heading" className="text-sm font-semibold uppercase tracking-wider">
+        Payment Corridors
+      </h2>
+      <ul aria-label="Payment corridors status" className="space-y-3">
         {corridors.map((corridor) => (
-          <div
+          <li
             key={corridor.corridor}
             className="flex items-center justify-between py-2 border-b border-[#222] last:border-0"
           >
             <div className="flex items-center gap-3">
               <div
+                aria-hidden="true"
                 className={cn(
                   'w-2 h-2 rounded-full',
                   corridor.status === 'operational'
@@ -36,17 +42,14 @@ export function CorridorList({ corridors }: CorridorListProps) {
                 Last tx: {formatTime(corridor.lastTransaction)}
               </span>
               <span
-                className={cn(
-                  'text-xs px-2 py-1 rounded border',
-                  getStatusColor(corridor.status),
-                )}
+                className={cn('text-xs px-2 py-1 rounded border', getStatusColor(corridor.status))}
               >
                 {getStatusText(corridor.status)}
               </span>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
-    </div>
+      </ul>
+    </section>
   );
 }

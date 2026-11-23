@@ -169,6 +169,18 @@ export class DIContainer {
   }
 
   /**
+   * Resolve a service synchronously, registering the provided fallback as a
+   * singleton if the key is not yet registered. Handy in tests where a
+   * repository mock should be wired in on demand without prior setup.
+   */
+  resolveOrRegister<T>(key: string | symbol, fallback: T, scopeId?: string): T {
+    if (!this.has(key)) {
+      this.registerSingleton(key, fallback);
+    }
+    return this.resolveSync<T>(key, scopeId);
+  }
+
+  /**
    * Check if a service is registered
    */
   has(key: string | symbol): boolean {

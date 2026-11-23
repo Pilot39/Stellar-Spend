@@ -22,6 +22,9 @@ export interface IconProps {
   className?: string;
 }
 
+/** Default rendered icon size in pixels. */
+export const DEFAULT_ICON_SIZE = 16;
+
 const VIEW_BOX: Record<IconName, string> = {
   close: '0 0 16 16',
   'chevron-down': '0 0 24 24',
@@ -87,7 +90,11 @@ const CONTENT: Record<IconName, (strokeWidth: number) => ReactNode> = {
   ),
   bell: (sw) => (
     <>
-      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth={sw} />
+      <path
+        d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"
+        stroke="currentColor"
+        strokeWidth={sw}
+      />
       <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth={sw} />
     </>
   ),
@@ -112,7 +119,7 @@ const CONTENT: Record<IconName, (strokeWidth: number) => ReactNode> = {
   ),
 };
 
-export function Icon({ name, size = 16, strokeWidth, className }: IconProps) {
+export function Icon({ name, size = DEFAULT_ICON_SIZE, strokeWidth, className }: IconProps) {
   const sw = strokeWidth ?? DEFAULT_STROKE_WIDTH[name];
   return (
     <svg

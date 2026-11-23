@@ -94,6 +94,15 @@ still readable and semantically unchanged — rather than a synthetic shortcut.
 Run per-contract: `cargo test -p escrow --test upgrade` (and similarly for
 `fee-manager`, `treasury`, `multisig-authority`).
 
+## Architecture Decision Records
+
+Design decisions are recorded as ADRs under [`docs/adr/`](docs/adr/):
+
+- [ADR 0001 — Escrow & Multisig Authority Design](docs/adr/0001-escrow-multisig-design.md):
+  authority model (init, deposit, release, refund, dispute, M-of-N threshold
+  signing with high-value limit) and the upgrade strategy (schema versioning,
+  `migrate`, WASM swap via `upgrade()`).
+
 ## Error codes (issue #816)
 
 All four contracts return the single [`stellar_spend_shared::errors::ContractError`]

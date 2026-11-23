@@ -1,17 +1,40 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { bpClasses } from '@/lib/breakpoints';
+import { Skeleton } from '@/components/ui';
 import { ThemeToggle } from './ThemeToggle';
 import { CopyButton } from './CopyButton';
 import { WalletModal } from './WalletModal';
 import { LanguageSelector } from '@/lib/i18n/LanguageSelector';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import { NotificationCenter } from './NotificationCenter';
 import { useFxRate } from '@/hooks/useFxRate';
 import { useNotificationEvents } from '@/contexts/NotificationProvider';
 import type { WalletType } from '@/lib/stellar';
 import { formatNumber } from '@/lib/format';
+
+/** Minimum length before a wallet address is truncated for display. */
+const ADDRESS_TRUNCATE_THRESHOLD = 10;
+/** Number of leading characters kept when truncating a wallet address. */
+const ADDRESS_LEADING_CHARS = 4;
+/** Number of trailing characters kept when truncating a wallet address. */
+const ADDRESS_TRAILING_CHARS = 4;
+/** SVG icon size (px) for the help button. */
+const HELP_ICON_SIZE = 20;
+/** SVG viewBox for the help icon. */
+const HELP_ICON_VIEWBOX = '0 0 24 24';
+/** SVG stroke width for the help icon. */
+const HELP_ICON_STROKE_WIDTH = 2;
+/** Circle radius for the help icon. */
+const HELP_ICON_CIRCLE_RADIUS = 12;
+/** Placeholder shown when a value is unavailable. */
+const EMPTY_VALUE_PLACEHOLDER = '—';
+/** Keyboard shortcut hint for the help button. */
+const HELP_SHORTCUT = 'Shift + ?';
+/** Keyboard shortcut for copying the wallet address. */
+const COPY_WALLET_SHORTCUT = 'w';
 
 export interface HeaderProps {
   subtitle: string;
@@ -30,18 +53,21 @@ export interface HeaderProps {
   onModalRef?: (openModal: () => void) => void;
 }
 
+type TranslateFn = (key: string, vars?: Record<string, string | number>) => string;
+
 function truncateAddress(address: string): string {
-  if (address.length <= 10) return address;
-  return `${address.slice(0, 4)}...${address.slice(-4)}`;
+  if (address.length <= ADDRESS_TRUNCATE_THRESHOLD) return address;
+  return `${address.slice(0, ADDRESS_LEADING_CHARS)}...${address.slice(-ADDRESS_TRAILING_CHARS)}`;
 }
 
-function WalletButton({
+const WalletButton = memo(function WalletButton({
   isConnected,
   isConnecting,
   walletAddress,
   walletType,
   onOpenModal,
   onDisconnect,
+  t,
 }: {
   isConnected: boolean;
   isConnecting: boolean;
@@ -49,12 +75,17 @@ function WalletButton({
   walletType?: 'Freighter' | 'Lobstr' | null;
   onOpenModal: () => void;
   onDisconnect: () => void;
+  t: TranslateFn;
 }) {
-  const label = isConnecting
-    ? 'CONNECTING...'
-    : isConnected && walletAddress
-      ? truncateAddress(walletAddress)
-      : 'CONNECT WALLET';
+  const label = useMemo(
+    () =>
+      isConnecting
+        ? t('header.wallet.connecting')
+        : isConnected && walletAddress
+          ? truncateAddress(walletAddress)
+          : t('header.wallet.connect'),
+    [isConnecting, isConnected, walletAddress, t],
+  );
 
   const disabled = isConnecting;
 
@@ -66,12 +97,23 @@ function WalletButton({
         </span>
       )}
       {isConnected && walletAddress && (
-        <CopyButton text={walletAddress} label="" className="text-xs" keyboardShortcut="w" />
+        <CopyButton
+          text={walletAddress}
+          label=""
+          className="text-xs"
+          keyboardShortcut={COPY_WALLET_SHORTCUT}
+        />
       )}
       <button
+        type="button"
         onClick={isConnected ? onDisconnect : onOpenModal}
         disabled={disabled}
-        aria-label={isConnected ? 'Disconnect wallet' : 'Connect wallet'}
+        aria-label={
+          isConnected ? t('header.wallet.disconnectAria') : t('header.wallet.connectAria')
+        }
+        aria-busy={isConnecting}
+        aria-haspopup={isConnected ? undefined : 'dialog'}
+        aria-expanded={isConnected ? undefined : undefined}
         data-testid={isConnected ? 'wallet-button' : 'connect-wallet-button'}
         className={cn(
           'px-4 py-2 min-h-[44px] text-xs tracking-widest border transition-colors duration-150',
@@ -85,9 +127,9 @@ function WalletButton({
       </button>
     </div>
   );
-}
+});
 
-export function Header({
+export const Header = memo(function Header({
   subtitle,
   isConnected,
   isConnecting,
@@ -102,87 +144,114 @@ export function Header({
   onHelpOpen,
   onModalRef,
 }: HeaderProps) {
+  const { t } = useTranslation();
   const { rate, flash } = useFxRate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [connectingWallet, setConnectingWallet] = useState<WalletType | null>(null);
+  const [isHelpActive, setIsHelpActive] = useState(false);
 
   // Load notifications from the unified NotificationProvider (#1042)
   const notificationCenter = useNotificationEvents();
 
-  const handleOpenModal = () => {
+  const handleOpenModal = useCallback(() => {
     setIsModalOpen(true);
+  }, []);
+
+  const handleHelpOpen = () => {
+    setIsHelpActive(true);
+    onHelpOpen?.();
   };
 
   // Expose openModal to parent via callback ref
   useEffect(() => {
     onModalRef?.(handleOpenModal);
-  }, [onModalRef]);
+  }, [onModalRef, handleOpenModal]);
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
     if (!isConnecting) setIsModalOpen(false);
-  };
+  }, [isConnecting]);
 
-  const handleConnectWallet = async (walletType: WalletType) => {
-    setConnectingWallet(walletType);
-    await onConnect(walletType);
-    setConnectingWallet(null);
-    // Close modal on success (no error)
-    if (!walletError) setIsModalOpen(false);
-  };
+  const handleConnectWallet = useCallback(
+    async (walletType: WalletType) => {
+      setConnectingWallet(walletType);
+      await onConnect(walletType);
+      setConnectingWallet(null);
+      // Close modal on success (no error)
+      if (!walletError) setIsModalOpen(false);
+    },
+    [onConnect, walletError],
+  );
 
   // Close modal when connection succeeds
-  if (isConnected && isModalOpen) {
-    setIsModalOpen(false);
-  }
+  useEffect(() => {
+    if (isConnected && isModalOpen) {
+      setIsModalOpen(false);
+    }
+  }, [isConnected, isModalOpen]);
+
+  const usdcBalanceText = useMemo(() => `${stellarUsdcBalance ?? '—'} USDC`, [stellarUsdcBalance]);
+  const xlmBalanceText = useMemo(() => `${stellarXlmBalance ?? '—'} XLM`, [stellarXlmBalance]);
 
   return (
     <>
       <header
-        className={`w-full px-6 py-5 flex items-start justify-between gap-6 ${bpClasses.headerCollapseFlexCol} ${bpClasses.headerCollapseItemsStart}`}
+        className={cn(
+          'w-full px-6 py-5 flex items-start justify-between gap-6',
+          bpClasses.headerCollapseFlexCol,
+          bpClasses.headerCollapseItemsStart,
+        )}
         role="banner"
       >
         {/* Left: title + subtitle + FX chip */}
         <div className="flex flex-col gap-1">
           <h1 className="font-space-grotesk font-bold text-white leading-none tracking-tight text-[clamp(1.5rem,4vw,2.5rem)]">
-            STELLAR-SPEND
+            {t('header.title')}
           </h1>
           <p className="text-xs text-[#777777] tracking-widest uppercase">{subtitle}</p>
           <span
             aria-live="polite"
-            aria-label="Live FX rate"
+            aria-label={t('header.fxRateAria')}
             className={cn(
               'mt-1 inline-block self-start px-2 py-0.5 text-[10px] tracking-widest uppercase border border-[#c9a962]/40 text-[#c9a962] transition-colors duration-300',
               flash && 'bg-[#c9a962]/20',
             )}
           >
             {rate != null
-              ? `LIVE RATE: ₦${formatNumber(Math.round(rate))} / USDC`
-              : 'LIVE RATE: —'}
+              ? t('header.fxRate', { rate: formatNumber(Math.round(rate)) })
+              : t('header.fxRateUnavailable', { placeholder: EMPTY_VALUE_PLACEHOLDER })}
           </span>
         </div>
 
         {/* Right: notifications + wallet button + balances */}
-        <div className={`flex flex-col items-end gap-2 ${bpClasses.headerCollapseItemsStart}`}>
+        <div className={cn('flex flex-col items-end gap-2', bpClasses.headerCollapseItemsStart)}>
           <div className="flex items-center gap-2">
             <LanguageSelector />
             <button
-              onClick={onHelpOpen}
-              aria-label="Open help"
+              type="button"
+              onClick={handleHelpOpen}
+              aria-label={t('header.helpAria')}
+              aria-current={isHelpActive ? 'page' : undefined}
               className={cn(
                 'p-2 text-[#777777] hover:text-[#c9a962] transition-colors',
                 'focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c9a962]',
               )}
-              title="Help & Documentation (Shift + ?)"
+              title={t('header.helpTitle', { shortcut: HELP_SHORTCUT })}
             >
               <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
+                width={HELP_ICON_SIZE}
+                height={HELP_ICON_SIZE}
+                viewBox={HELP_ICON_VIEWBOX}
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth={HELP_ICON_STROKE_WIDTH}
+                aria-hidden="true"
+                focusable="false"
               >
-                <circle cx="12" cy="12" r="10"></circle>
+                <circle
+                  cx={HELP_ICON_CIRCLE_RADIUS}
+                  cy={HELP_ICON_CIRCLE_RADIUS}
+                  r={HELP_ICON_CIRCLE_RADIUS - 2}
+                ></circle>
                 <path d="M12 16v-4"></path>
                 <path d="M12 8h.01"></path>
               </svg>
@@ -207,20 +276,31 @@ export function Header({
               walletType={walletType}
               onOpenModal={handleOpenModal}
               onDisconnect={onDisconnect}
+              t={t}
             />
           </div>
 
           {isConnected && (
-            <div className={`flex flex-col items-end gap-0.5 ${bpClasses.headerCollapseItemsStart}`}>
+            <div
+              className={cn('flex flex-col items-end gap-0.5', bpClasses.headerCollapseItemsStart)}
+              data-testid="header-balances"
+            >
               {isBalanceLoading ? (
-                <span className="text-xs text-[#777777] tracking-widest">loading...</span>
+                <div className="flex flex-col items-end gap-0.5">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
               ) : (
                 <>
                   <span className="text-xs text-[#c9a962] tracking-wider">
-                    {stellarUsdcBalance ?? '—'} USDC
+                    {t('header.balances.usdc', {
+                      amount: stellarUsdcBalance ?? EMPTY_VALUE_PLACEHOLDER,
+                    })}
                   </span>
                   <span className="text-xs text-[#777777] tracking-wider">
-                    {stellarXlmBalance ?? '—'} XLM
+                    {t('header.balances.xlm', {
+                      amount: stellarXlmBalance ?? EMPTY_VALUE_PLACEHOLDER,
+                    })}
                   </span>
                 </>
               )}
@@ -240,4 +320,4 @@ export function Header({
       />
     </>
   );
-}
+});

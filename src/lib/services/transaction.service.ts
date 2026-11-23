@@ -1,5 +1,5 @@
 import type { Transaction } from '@/lib/transaction-storage';
-import type { TransactionStore } from './ports';
+import type { TransactionRepository, TransactionStats } from '@/lib/repositories';
 
 export interface TransactionFilter {
   status?: string;
@@ -11,28 +11,24 @@ export interface TransactionFilter {
 }
 
 export class TransactionService {
-  constructor(private readonly store: TransactionStore) {}
+  constructor(private readonly repository: TransactionRepository) {}
 
   async getTransaction(id: string): Promise<Transaction | null> {
     if (!id) {
       throw new Error('Transaction ID is required');
     }
-    return this.store.getById(id);
+    return this.repository.getById(id);
   }
 
   async getTransactionByPayoutOrderId(orderId: string): Promise<Transaction | null> {
     if (!orderId) {
       throw new Error('Order ID is required');
     }
-    return this.store.getByPayoutOrderId(orderId);
+    return this.repository.getByPayoutOrderId(orderId);
   }
 
   async listTransactions(filter: TransactionFilter): Promise<Transaction[]> {
-    // Query logic would go here, applying the supplied filter (status, currency,
-    // date range, limit, offset) to the transaction store
-    void filter;
-
-    return [];
+    return this.repository.list(filter);
   }
 
   async updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction | null> {
@@ -44,8 +40,7 @@ export class TransactionService {
       throw new Error('No updates provided');
     }
 
-    await this.store.update(id, updates);
-    return this.store.getById(id);
+    return this.repository.update(id, updates);
   }
 
   async deleteTransaction(id: string): Promise<boolean> {
@@ -53,24 +48,10 @@ export class TransactionService {
       throw new Error('Transaction ID is required');
     }
 
-    // Delete logic would go here
-    return true;
+    return this.repository.delete(id);
   }
 
-  async getTransactionStats(_filter?: TransactionFilter): Promise<{
-    total: number;
-    completed: number;
-    failed: number;
-    pending: number;
-    totalAmount: string;
-  }> {
-    // Stats aggregation logic would go here
-    return {
-      total: 0,
-      completed: 0,
-      failed: 0,
-      pending: 0,
-      totalAmount: '0',
-    };
+  async getTransactionStats(filter?: TransactionFilter): Promise<TransactionStats> {
+    return this.repository.getStats(filter);
   }
 }

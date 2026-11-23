@@ -1,75 +1,136 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { z } from 'zod';
-import { ApiError } from '../error-types';
-import { ErrorHandler } from '../error-handler';
-import { formatZodErrors, type FormattedValidationError } from '../validators/schemas';
+import { z, ZodError, ZodSchema } from 'zod';
+import { ErrorHandler } from '@/lib/errors/error-handler';
 
+/**
+ * Shape of a single formatted validation issue.
+ */
+export interface ValidationFieldError {
+  path: string;
+  message: string;
+  code: string;
+}
+
+/**
+ * Result of a validation attempt.
+ *
+ * On success, `data` holds the parsed (and possibly transformed) value and
+ * `response` is `undefined`. On failure, `data` is `undefined` and `response`
+ * holds a ready-to-return 400 `NextResponse` built with the standardized error
+ * envelope via `ErrorHandler.validation`.
+ */
 export type ValidationResult<T> =
-  | { success: true; data: T }
-  | { success: false; response: NextResponse };
+  | { success: true; data: T; response?: undefined }
+  | { success: false; data?: undefined; response: NextResponse };
 
-function buildValidationError(error: z.ZodError): ApiError {
-  const fieldErrors: FormattedValidationError[] = formatZodErrors(error);
-  const message = `Validation failed: ${fieldErrors
-    .map((f) => `${f.field} (${f.message})`)
-    .join(', ')}`;
-
-  return ApiError.validation(message, { fieldErrors });
+/**
+ * Convert a `ZodError` into a flat list of field errors.
+ */
+export function formatZodIssues(error: ZodError): ValidationFieldError[] {
+  return error.issues.map((issue) => ({
+    path: issue.path.length > 0 ? issue.path.join('.') : '(root)',
+    message: issue.message,
+    code: issue.code,
+  }));
 }
 
 /**
- * Parses a request's JSON body and validates it against a Zod schema.
- *
- * Returns `{ success: true, data }` with the parsed, typed body on success.
- * On failure (malformed JSON or a schema violation) returns
- * `{ success: false, response }` where `response` is a ready-to-return
- * typed 400 error response — callers just do:
- *
- *   const validation = await validateBody(request, mySchema);
- *   if (!validation.success) return validation.response;
- *   const body = validation.data;
+ * Build a standardized 400 response for a validation failure.
  */
-export async function validateBody<S extends z.ZodTypeAny>(
-  request: NextRequest,
-  schema: S,
-): Promise<ValidationResult<z.infer<S>>> {
-  let raw: unknown;
+export function buildValidationErrorResponse(
+  error: ZodError,
+  message = 'Request validation failed',
+): NextResponse {
+  const fieldErrors = formatZodIssues(error);
+  return ErrorHandler.validation(message, fieldErrors);
+}
+
+/**
+ * Internal helper that parses `input` with `schema` and returns either the
+ * parsed data or a standardized 400 response.
+ */
+function parseWithSchema<T>(
+  schema: ZodSchema<T>,
+  input: unknown,
+  message?: string,
+): ValidationResult<T> {
+  const result = schema.safeParse(input);
+  if (result.success) {
+    return { success: true, data: result.data };
+  }
+  return {
+    success: false,
+    response: buildValidationErrorResponse(result.error, message),
+  };
+}
+
+/**
+ * Safely read and parse a JSON request body.
+ *
+ * Returns `undefined` when the body is empty or not valid JSON so that the
+ * schema can decide whether that is acceptable (e.g. optional body). This keeps
+ * previously accepted inputs (empty bodies) backwards compatible.
+ */
+async function readJsonBody(request: NextRequest): Promise<unknown> {
   try {
-    raw = await request.json();
+    const text = await request.text();
+    if (text.trim() === '') {
+      return undefined;
+    }
+    return JSON.parse(text);
   } catch {
-    return {
-      success: false,
-      response: ErrorHandler.handle(ApiError.validation('Invalid JSON in request body')),
-    };
+    return undefined;
   }
-
-  const result = schema.safeParse(raw);
-  if (!result.success) {
-    return {
-      success: false,
-      response: ErrorHandler.handle(buildValidationError(result.error)),
-    };
-  }
-
-  return { success: true, data: result.data };
 }
 
 /**
- * Validates a request's URL query parameters against a Zod schema.
- * Every query param arrives as a string, so schemas should expect strings
- * (use `z.coerce.number()` etc. for typed fields).
+ * Validate a JSON request body against a zod schema.
+ *
+ * On success returns `{ success: true, data }`. On failure returns
+ * `{ success: false, response }` where `response` is a standardized 400.
  */
-export function validateQuery<S extends z.ZodTypeAny>(
+export async function validateBody<T>(
   request: NextRequest,
-  schema: S,
-): ValidationResult<z.infer<S>> {
-  const params = Object.fromEntries(request.nextUrl.searchParams.entries());
-  const result = schema.safeParse(params);
-  if (!result.success) {
-    return {
-      success: false,
-      response: ErrorHandler.handle(buildValidationError(result.error)),
-    };
-  }
-  return { success: true, data: result.data };
+  schema: ZodSchema<T>,
+  message = 'Invalid request body',
+): Promise<ValidationResult<T>> {
+  const body = await readJsonBody(request);
+  return parseWithSchema(schema, body, message);
 }
+
+/**
+ * Validate query string parameters against a zod schema.
+ *
+ * The raw query object is provided as a plain record of string values (with
+ * repeated keys collapsed to arrays) so existing query handling remains
+ * backwards compatible.
+ */
+export function validateQuery<T>(
+  request: NextRequest,
+  schema: ZodSchema<T>,
+  message = 'Invalid query parameters',
+): ValidationResult<T> {
+  const query: Record<string, string | string[]> = {};
+  for (const key of new Set(request.nextUrl.searchParams.keys())) {
+    const values = request.nextUrl.searchParams.getAll(key);
+    query[key] = values.length > 1 ? values : values[0];
+  }
+  return parseWithSchema(schema, query, message);
+}
+
+/**
+ * Validate dynamic route parameters against a zod schema.
+ */
+export function validateParams<T>(
+  params: unknown,
+  schema: ZodSchema<T>,
+  message = 'Invalid route parameters',
+): ValidationResult<T> {
+  return parseWithSchema(schema, params, message);
+}
+
+/**
+ * Convenience re-export so callers can build schemas from the same zod
+ * instance used for validation.
+ */
+export { z };

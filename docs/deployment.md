@@ -12,6 +12,7 @@ This guide covers deploying Stellar-Spend to production on Vercel, including env
 4. [DNS and Domain Setup](#dns-and-domain-setup)
 5. [Monitoring and Logging](#monitoring-and-logging)
 6. [Rollback Procedures](#rollback-procedures)
+7. [Contract Deployment and Migration Runbook](#contract-deployment-and-migration-runbook)
 
 ---
 
@@ -302,3 +303,101 @@ kubectl rollout status deployment/stellar-spend
 ```
 
 The deployment uses liveness and readiness probes on `/api/health` so Kubernetes only routes traffic to healthy pods.
+
+---
+
+## Contract Deployment and Migration Runbook
+
+This section covers deploying the Soroban contracts under `contracts/` and applying the SQL migrations under `migrations/`. Follow the order below exactly — contracts depend on each other, and migrations must run in sequence.
+
+### Contract Deploy Order
+
+Deploy the contracts in this order. Each contract depends on the ones before it:
+
+1. **Shared library** (`contracts/shared`) — common types and helpers. Build and publish it first; every other contract links against it.
+2. **Fee manager** (`contracts/fee-manager`)
+3. **Treasury** (`contracts/treasury`)
+4. **Escrow** (`contracts/escrow`)
+5. **Multisig authority** (`contracts/multisig-authority`)
+6. **Admin example** (`contracts/admin_example`) — deployed last; it references the contracts above.
+
+For each contract:
+
+1. Build the optimized WASM:
+
+   ```bash
+   cargo build --release --target wasm32-unknown-unknown -p <crate-name>
+   ```
+
+2. Upload the WASM to the network and note the resulting **WASM hash**:
+
+   ```bash
+   stellar contract upload --wasm target/wasm32-unknown-unknown/release/<crate>.wasm --network <network>
+   ```
+
+3. Deploy an instance from that hash:
+
+   ```bash
+   stellar contract deploy --wasm-hash <wasm-hash> --network <network>
+   ```
+
+4. Call the contract's `init` function immediately after deploy. A contract that has been uploaded/deployed but not initialized is not usable, and `init` can only be called once per instance.
+
+5. Before any `upgrade` or `migrate` call, read the contract's `schema_version` and confirm it matches the version the new WASM expects. Do not upgrade across a schema boundary without a corresponding `migrate`.
+
+### Migration Application Order
+
+Apply the SQL migrations in `migrations/` in numeric order:
+
+1. `001_create_transactions.sql` — creates the base transaction schema. Must run first.
+2. `999_remove_unused_schema.sql` — removes deprecated tables/columns. Must run **after** `001` and after the application has been deployed against the new schema.
+
+Before running `999_remove_unused_schema.sql`, follow the safety and backup steps documented at the top of that file (take a full database backup and verify it restores). The file also contains restoration statements at the bottom for reversing its changes — keep them handy.
+
+### Rollback Steps
+
+#### Contracts
+
+1. Redeploy the previous known-good WASM by calling `upgrade` with the previous WASM hash:
+
+   ```bash
+   stellar contract invoke --id <contract-id> --network <network> -- upgrade --new_wasm_hash <previous-wasm-hash>
+   ```
+
+2. Run `migrate` **only** if the older build expects the older schema. If the schema did not change between the two builds, skip `migrate`.
+3. If a forward `migrate` already ran and the older build cannot read the new schema, restore the contract state from the pre-migration snapshot (or redeploy the previous instance from its backup state) — a WASM downgrade alone will not undo a schema migration.
+
+#### SQL Migrations
+
+1. If `999_remove_unused_schema.sql` has already run, restore from the pre-migration database backup taken before applying it.
+2. If no backup is available, run the restoration statements at the bottom of `999_remove_unused_schema.sql` to recreate the removed tables/columns.
+3. `001_create_transactions.sql` is additive; to reverse it, drop the objects it created only after confirming no data depends on them.
+
+### Acceptance Checks
+
+Run these after every contract deploy or migration:
+
+1. **Unit tests** — run `cargo test` for each contract crate:
+
+   ```bash
+   cargo test -p shared -p fee-manager -p treasury -p escrow -p multisig-authority -p admin_example
+   ```
+
+2. **Schema version** — after deploy, invoke `schema_version` on each contract and confirm it equals the expected constant defined in that crate:
+
+   ```bash
+   stellar contract invoke --id <contract-id> --network <network> -- schema_version
+   ```
+
+3. **Integration tests** — run the integration tests under each `contracts/*/tests` directory:
+
+   ```bash
+   cargo test --test '*' -p <crate-name>
+   ```
+
+4. **Health endpoint** — confirm the application is healthy after the deploy:
+
+   ```bash
+   curl https://app.your-domain.com/api/health
+   # {"status":"ok","timestamp":"...","version":"0.1.0"}
+   ```

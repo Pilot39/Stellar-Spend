@@ -4,7 +4,16 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 export type Theme = 'light' | 'dark' | 'high-contrast';
 
-interface ThemeContextValue {
+/**
+ * Value exposed by {@link ThemeContext}.
+ *
+ * - `theme`: the currently applied theme.
+ * - `isSystem`: `true` when the theme follows the OS preference (no stored override).
+ * - `toggleTheme`: cycles through dark → light → high-contrast and persists the choice.
+ * - `setTheme`: applies and persists an explicit theme.
+ * - `useSystemTheme`: clears any stored override and follows the OS preference again.
+ */
+export interface ThemeContextValue {
   theme: Theme;
   isSystem: boolean;
   toggleTheme: () => void;
@@ -30,6 +39,15 @@ function readStoredTheme(): Theme | null {
   return stored === 'light' || stored === 'dark' || stored === 'high-contrast' ? stored : null;
 }
 
+/**
+ * Provides theme state to the app.
+ *
+ * This provider is composed through `AppProviders` and should not be mounted
+ * separately; doing so would create duplicate theme state and listeners.
+ * It applies the resolved theme to `<html>` via `data-theme` and `color-scheme`,
+ * persists explicit choices in `localStorage`, and tracks OS preference changes
+ * while in system mode.
+ */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('dark');
   const [isSystem, setIsSystem] = useState<boolean>(true);
@@ -117,6 +135,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Access the current theme context.
+ *
+ * Must be used within `ThemeProvider` (normally via `AppProviders`).
+ *
+ * @example
+ * const { theme, toggleTheme } = useTheme();
+ *
+ * @throws If called outside of a `ThemeProvider`.
+ */
 export function useTheme(): ThemeContextValue {
   const ctx = useContext(ThemeContext);
   if (!ctx) throw new Error('useTheme must be used within ThemeProvider');

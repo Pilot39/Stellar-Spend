@@ -38,9 +38,20 @@ export function ClaimFormFields({
   const { t } = useI18n();
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4 animate-in fade-in duration-300">
-      <div className="p-2 bg-green-900/10 border border-green-500/30 flex items-center gap-2">
-        <span className="text-green-500 text-xs">✓</span>
+    <form
+      onSubmit={onSubmit}
+      aria-label={t('insurance.file_claim')}
+      aria-busy={loading}
+      noValidate
+      className="flex flex-col gap-4 animate-in fade-in duration-300"
+    >
+      <div
+        role="status"
+        className="p-2 bg-green-900/10 border border-green-500/30 flex items-center gap-2"
+      >
+        <span aria-hidden="true" className="text-green-500 text-xs">
+          ✓
+        </span>
         <p className="text-[10px] text-green-500 uppercase tracking-widest font-bold">
           {t('insurance.eligible')}
         </p>
@@ -58,10 +69,13 @@ export function ClaimFormFields({
           value={reason}
           onChange={(e) => onReasonChange(e.target.value)}
           required
+          aria-required="true"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? 'claim-form-error' : undefined}
           className={cn(
             'w-full bg-[#111111] border border-[#333333] px-3 py-2.5',
             'text-xs text-white appearance-none cursor-pointer',
-            'focus:outline-none focus-border-[#c9a962]',
+            'focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c9a962]',
             'disabled:opacity-50',
           )}
         >
@@ -89,12 +103,16 @@ export function ClaimFormFields({
           placeholder={t('insurance.evidence_placeholder')}
           rows={3}
           maxLength={2000}
+          aria-describedby="claim-evidence-hint"
           className={cn(
             'w-full bg-[#111111] border border-[#333333] px-3 py-2.5 resize-none',
             'text-xs text-white placeholder-[#555555]',
-            'focus:outline-none focus:border-[#c9a962]',
+            'focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c9a962]',
           )}
         />
+        <span id="claim-evidence-hint" className="sr-only">
+          {t('insurance.evidence_placeholder')}
+        </span>
       </div>
 
       <FileUploadZone
@@ -106,7 +124,9 @@ export function ClaimFormFields({
 
       {error && (
         <div
+          id="claim-form-error"
           role="alert"
+          aria-live="assertive"
           className="border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400"
         >
           {error}
@@ -118,6 +138,7 @@ export function ClaimFormFields({
           type="button"
           onClick={onCancel}
           disabled={loading}
+          aria-label={t('common.cancel')}
           className={cn(
             'flex-1 py-2.5 min-h-[44px] text-[10px] font-bold tracking-widest border border-[#333333]',
             'text-[#777777] bg-transparent transition-colors duration-150',
@@ -131,6 +152,8 @@ export function ClaimFormFields({
         <button
           type="submit"
           disabled={!reason || loading}
+          aria-label={t('insurance.file_claim')}
+          aria-disabled={!reason || loading}
           className={cn(
             'flex-1 py-2.5 min-h-[44px] text-[10px] font-bold tracking-widest border',
             !reason || loading

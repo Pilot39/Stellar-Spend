@@ -65,3 +65,28 @@ export const NoDelay: Story = {
     children: <button className="px-3 py-1.5 border border-line rounded">Hover me</button>,
   },
 };
+
+export const LongContent: Story = {
+  args: {
+    content:
+      'This is a longer tooltip message that wraps across multiple lines to verify layout and readability.',
+    position: 'top',
+    children: <button className="px-3 py-1.5 border border-line rounded">Hover me</button>,
+  },
+};
+
+export const OnIconButton: Story = {
+  args: {
+    content: 'Settings',
+    position: 'bottom',
+    children: (
+      <button
+        type="button"
+        aria-label="Settings"
+        className="inline-flex h-8 w-8 items-center justify-center border border-line rounded"
+      >
+        ⚙
+      </button>
+    ),
+  },
+};

@@ -152,7 +152,8 @@ export async function verifyWebhookSignature(
   }
 
   await pruneExpiredNonces();
-  const replayKey = nonceHeader ?? `${timestampHeader}:${signature.slice(0, 16)}`;
+  // A 16-character prefix could collide between two distinct signatures (#1466).
+  const replayKey = nonceHeader ?? `${timestampHeader}:${signature}`;
   const alreadySeen = await isReplay(replayKey);
   if (alreadySeen) {
     logVerificationFailure('replay_detected', { timestampHeader, nonceHeader });

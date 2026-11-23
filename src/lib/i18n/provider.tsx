@@ -28,6 +28,14 @@ interface I18nContextType {
   setLanguage: (language: Language) => void;
   t: (key: string) => string;
   isRTL: boolean;
+  /** True while a non-English locale bundle is being fetched. */
+  localeLoading: boolean;
+  /**
+   * Translate a key with interpolation values, e.g.
+   * `t('greeting', { name: 'Ada' })`. Falls back to `t(key)` when the
+   * underlying instance does not support interpolation.
+   */
+  translate: (key: string, values?: Record<string, string | number>) => string;
 }
 
 const I18nContext = createContext<I18nContextType | undefined>(undefined);
@@ -41,26 +49,49 @@ export function I18nProvider({
 }) {
   const [i18nInstance] = useState(() => new I18n(defaultLanguage));
   const [language, setLanguageState] = useState<Language>(defaultLanguage);
+  const [localeLoading, setLocaleLoading] = useState(false);
 
-  // Apply browser detection + stored preference after mount
+  // After mount: apply browser-detected or stored language preference.
+  // Uses setLanguageAsync so the locale chunk is fetched before the UI updates.
   useEffect(() => {
     const initial = getInitialLanguage(defaultLanguage);
     if (initial !== defaultLanguage) {
-      i18nInstance.setLanguage(initial);
-      setLanguageState(initial);
+      setLocaleLoading(true);
+      void i18nInstance.setLanguageAsync(initial).then(() => {
+        setLanguageState(initial);
+        setLocaleLoading(false);
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setLanguage = useCallback(
     (lang: Language) => {
-      i18nInstance.setLanguage(lang);
-      setLanguageState(lang);
-      try {
-        localStorage.setItem(STORAGE_KEY, lang);
-      } catch {
-        /* ignore */
+      setLocaleLoading(true);
+      void i18nInstance.setLanguageAsync(lang).then(() => {
+        setLanguageState(lang);
+        setLocaleLoading(false);
+        try {
+          localStorage.setItem(STORAGE_KEY, lang);
+        } catch {
+          /* ignore */
+        }
+      });
+    },
+    [i18nInstance],
+  );
+
+  const t = useCallback((key: string) => i18nInstance.t(key), [i18nInstance]);
+
+  const translate = useCallback(
+    (key: string, values?: Record<string, string | number>) => {
+      const instance = i18nInstance as I18n & {
+        tWithValues?: (k: string, v?: Record<string, string | number>) => string;
+      };
+      if (typeof instance.tWithValues === 'function') {
+        return instance.tWithValues(key, values);
       }
+      return i18nInstance.t(key);
     },
     [i18nInstance],
   );
@@ -68,8 +99,10 @@ export function I18nProvider({
   const value: I18nContextType = {
     language,
     setLanguage,
-    t: (key: string) => i18nInstance.t(key),
+    t,
     isRTL: i18nInstance.isRTL(),
+    localeLoading,
+    translate,
   };
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

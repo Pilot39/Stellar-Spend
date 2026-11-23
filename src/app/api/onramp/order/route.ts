@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { globalContainer } from '@/lib/di';
 import { SERVICE_KEYS } from '@/lib/di';
 import { withIdempotency } from '@/lib/idempotency';
-import { ErrorHandler } from '@/lib/error-handler';
+import { apiError } from '@/lib/api-error';
 import { validateBody } from '@/lib/validation/validate-request';
 import { amountSchema } from '@/lib/validators/schemas';
 
@@ -53,8 +53,8 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(order, { status: 201 });
       } catch (error) {
-        logger.error('Onramp order error:', {}, error);
-        return ErrorHandler.serverError(error);
+        logger.error('Onramp order error', { route: 'onramp/order' }, error);
+        return apiError(error);
       }
     },
     { required: true },

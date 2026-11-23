@@ -1,12 +1,28 @@
 import type { Metadata, Viewport } from 'next';
+import dynamic from 'next/dynamic';
 import { IBM_Plex_Mono, Space_Grotesk } from 'next/font/google';
 import './globals.css';
 import { AppProviders } from '@/contexts/AppProviders';
-import { ToastContainer } from '@/components/Toast';
-import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration';
-import PWAInstallPrompt from '@/components/PWAInstallPrompt';
-import OfflineBanner from '@/components/OfflineBanner';
 import { HtmlDirSync } from '@/components/HtmlDirSync';
+
+// Non-critical shell components are loaded lazily to keep the initial bundle small.
+// They are client-only (browser APIs / user interaction), so SSR is disabled.
+const ToastContainer = dynamic(
+  () => import('@/components/Toast').then((mod) => mod.ToastContainer),
+  { ssr: false },
+);
+
+const ServiceWorkerRegistration = dynamic(() => import('@/components/ServiceWorkerRegistration'), {
+  ssr: false,
+});
+
+const PWAInstallPrompt = dynamic(() => import('@/components/PWAInstallPrompt'), {
+  ssr: false,
+});
+
+const OfflineBanner = dynamic(() => import('@/components/OfflineBanner'), {
+  ssr: false,
+});
 
 const ibmPlexMono = IBM_Plex_Mono({
   subsets: ['latin'],

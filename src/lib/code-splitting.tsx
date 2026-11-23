@@ -23,35 +23,41 @@ export function dynamicComponent<P extends object>(
 }
 
 /**
- * Lazy load a module on demand.
- */
-export async function lazyLoadModule<T>(importFn: () => Promise<T>): Promise<T> {
-  return importFn();
-}
-
-/**
  * Preload a module in the background.
  */
 export function preloadModule<T>(importFn: () => Promise<T>): void {
   if (typeof window !== 'undefined') {
     // Use requestIdleCallback if available, otherwise use setTimeout
     if ('requestIdleCallback' in window) {
-      requestIdleCallback(() => importFn());
+      requestIdleCallback(() => {
+        void importFn();
+      });
     } else {
-      setTimeout(() => importFn(), 2000);
+      setTimeout(() => {
+        void importFn();
+      }, 2000);
     }
   }
 }
 
 /**
- * Split code by route for better code splitting.
- */
-export const routeChunks = {} as const;
-
-/**
- * Split code by feature for better code splitting.
+ * Lazy-loaded feature chunks used across the app.
  */
 export const featureChunks = {
   walletModal: () => import('@/components/WalletModal').then((m) => m.WalletModal),
   insurance: () => import('@/components/InsuranceOption').then((m) => m.InsuranceOption),
 } as const;
+
+/**
+ * Preload the wallet modal chunk in the background.
+ */
+export function preloadWalletModal(): void {
+  preloadModule(featureChunks.walletModal);
+}
+
+/**
+ * Preload the insurance option chunk in the background.
+ */
+export function preloadInsurance(): void {
+  preloadModule(featureChunks.insurance);
+}

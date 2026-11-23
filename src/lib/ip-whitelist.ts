@@ -1,7 +1,8 @@
 import { pool } from './db/client';
 import { logger } from './logger';
+import { randomHex } from '@/lib/crypto/ids';
 
-export interface IPWhitelistEntry {
+interface IPWhitelistEntry {
   id: string;
   userAddress: string;
   ipAddress?: string;
@@ -13,7 +14,7 @@ export interface IPWhitelistEntry {
   lastUsedAt?: number;
 }
 
-export interface IPViolation {
+interface IPViolation {
   id: string;
   userAddress: string;
   ipAddress: string;
@@ -29,7 +30,7 @@ export class IPWhitelistService {
     ipAddress: string,
     label?: string,
   ): Promise<IPWhitelistEntry> {
-    const id = `ip_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const id = `ip_${Date.now()}_${randomHex(6)}`;
     const now = Date.now();
 
     await pool.query(
@@ -60,7 +61,7 @@ export class IPWhitelistService {
     ipRangeEnd: string,
     label?: string,
   ): Promise<IPWhitelistEntry> {
-    const id = `ip_range_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const id = `ip_range_${Date.now()}_${randomHex(6)}`;
     const now = Date.now();
 
     await pool.query(
@@ -181,7 +182,7 @@ export class IPWhitelistService {
     severity: IPViolation['severity'],
     details?: string,
   ): Promise<IPViolation> {
-    const id = `violation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const id = `violation_${Date.now()}_${randomHex(6)}`;
     const now = Date.now();
 
     await pool.query(

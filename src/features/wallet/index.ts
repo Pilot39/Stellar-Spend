@@ -23,7 +23,11 @@ export { WalletOptionButton } from './components/modal/WalletOptionButton';
 export { WalletProvider, useWalletContext } from './context/WalletContext';
 export type { WalletContextValue } from './context/WalletContext';
 // Narrower context hooks (#1184)
-export { useWalletConnection, useWalletAccount, useWalletTransactionsContext } from './context/WalletContext';
+export {
+  useWalletConnection,
+  useWalletAccount,
+  useWalletTransactionsContext,
+} from './context/WalletContext';
 export type {
   WalletConnectionContextValue,
   WalletAccountContextValue,
@@ -36,3 +40,20 @@ export type { WalletState, WalletSettings } from './hooks/useStellarWallet';
 export { useWalletFlow } from './hooks/useWalletFlow';
 export { useWalletTransactions } from './hooks/useWalletTransactions';
 export type { WalletTransactions } from './hooks/useWalletTransactions';
+
+// --- Forms (#1442) ---
+// Wallet forms are built on the shared react-hook-form + zod pattern.
+// Schemas and the shared form hook are re-exported here so consumers
+// never reach into sub-paths.
+export { useWalletForm } from './hooks/useWalletForm';
+export type { UseWalletFormOptions, UseWalletFormReturn } from './hooks/useWalletForm';
+export {
+  walletConnectionSchema,
+  walletSettingsSchema,
+  walletTransactionSchema,
+} from './schemas/walletSchemas';
+export type {
+  WalletConnectionFormValues,
+  WalletSettingsFormValues,
+  WalletTransactionFormValues,
+} from './schemas/walletSchemas';

@@ -1,3 +1,4 @@
+import { randomHex } from '@/lib/crypto/ids';
 import { QRCodeData, QRCodeOptions, GeneratedQRCode } from '@stellar-spend/shared';
 
 export class QRCodeService {
@@ -63,7 +64,7 @@ export class QRCodeService {
     data: QRCodeData,
     options: QRCodeOptions = {},
   ): Promise<GeneratedQRCode> {
-    const id = `qr_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const id = `qr_${Date.now()}_${randomHex(6)}`;
     const qrData = this.generateQRData(data, options);
 
     const qrCode: GeneratedQRCode = {
@@ -75,7 +76,7 @@ export class QRCodeService {
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
     };
 
-    // TODO: Persist to database
+    // TODO(#1364): Persist to database
     return qrCode;
   }
 
@@ -83,12 +84,15 @@ export class QRCodeService {
    * Get QR code by transaction ID
    */
   async getQRCode(_transactionId: string): Promise<GeneratedQRCode | null> {
-    // TODO: Fetch from database
+    // TODO(#1364): Fetch from database
     return null;
   }
 
   /**
-   * Generate downloadable QR code
+   * Generate downloadable QR code.
+   * Currently only SVG format is supported; PNG support requires a canvas
+   * library (tracked in #1364). Requesting 'png' throws to avoid silently
+   * returning an empty string that callers would treat as a valid result.
    */
   generateDownloadableQR(
     data: QRCodeData,
@@ -100,9 +104,9 @@ export class QRCodeService {
       return this.generateSVGPattern(qrData, size);
     }
 
-    // For PNG, would need canvas library
-    // This is a placeholder
-    return '';
+    throw new Error(
+      "PNG QR code generation is not yet implemented. Use 'svg' format instead (see #1364).",
+    );
   }
 
   /**

@@ -1,3 +1,6 @@
+I need to see the current `StatusBadge` component to know all variants and props. Since I only have the stories file, I'll update based on the existing stories while ensuring coverage of all statuses and props. Let me provide the complete updated file.
+
+```tsx
 import type { Meta, StoryObj } from '@storybook/react';
 import { StatusBadge } from './StatusBadge';
 
@@ -6,6 +9,17 @@ const meta: Meta<typeof StatusBadge> = {
   component: StatusBadge,
   tags: ['autodocs'],
   argTypes: {
+    status: {
+      control: 'select',
+      options: [
+        'pending',
+        'processing',
+        'success',
+        'failed',
+        'reversed',
+        'completed',
+      ],
+    },
     showIcon: {
       control: 'boolean',
     },
@@ -42,6 +56,12 @@ export const Failed: Story = {
 export const Reversed: Story = {
   args: {
     status: 'reversed',
+  },
+};
+
+export const Completed: Story = {
+  args: {
+    status: 'completed',
   },
 };
 

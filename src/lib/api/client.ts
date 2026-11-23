@@ -29,6 +29,45 @@ export interface ApiRequestConfig {
   cache?: RequestCache;
 }
 
+/** Global client defaults applied to every request unless overridden. */
+export interface ApiClientDefaults {
+  baseUrl?: string;
+  headers?: Record<string, string>;
+}
+
+let clientDefaults: ApiClientDefaults = {};
+
+/**
+ * Configure global defaults (base URL and default headers) for the API client.
+ * Passing a partial object merges with the current defaults.
+ */
+export function configureApiClient(defaults: ApiClientDefaults): void {
+  clientDefaults = {
+    ...clientDefaults,
+    ...defaults,
+    headers: {
+      ...clientDefaults.headers,
+      ...defaults.headers,
+    },
+  };
+}
+
+/** Reset global defaults — primarily useful for tests. */
+export function resetApiClient(): void {
+  clientDefaults = {};
+}
+
+/** Resolve a possibly-relative URL against the configured base URL. */
+function resolveUrl(url: string): string {
+  const baseUrl = clientDefaults.baseUrl;
+  if (!baseUrl) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  const trimmedBase = baseUrl.replace(/\/+$/, '');
+  const trimmedPath = url.startsWith('/') ? url : `/${url}`;
+  return `${trimmedBase}${trimmedPath}`;
+}
+=======
+
 /**
  * Normalize API errors into a consistent shape
  */
@@ -89,13 +128,17 @@ async function parseJsonResponse(response: JsonParsable): Promise<unknown> {
  * const user = await apiRequest<User>('/api/users/123', { method: 'GET' });
  * const created = await apiPost<User>('/api/users', { name: 'John' });
  */
-async function apiRequest<T = unknown>(url: string, config: ApiRequestConfig = {}): Promise<T> {
+export async function apiRequest<T = unknown>(
+  url: string,
+  config: ApiRequestConfig = {},
+): Promise<T> {
   const { method = 'GET', headers = {}, body, timeout = 30000, credentials, cache } = config;
 
   const fetchInit: RequestInit = {
     method,
     headers: {
       'Content-Type': 'application/json',
+      ...clientDefaults.headers,
       ...headers,
     },
   };
@@ -116,7 +159,7 @@ async function apiRequest<T = unknown>(url: string, config: ApiRequestConfig = {
     const abortController = new AbortController();
     const timeoutId = setTimeout(() => abortController.abort(), timeout);
 
-    const response = await fetch(url, {
+    const response = await fetch(resolveUrl(url), {
       ...fetchInit,
       signal: abortController.signal,
     });
@@ -189,10 +232,16 @@ export async function apiDelete<T = unknown>(url: string, config?: ApiRequestCon
  * const flags = await apiClient.get<FeatureFlags>('/api/admin/feature-flags');
  * await apiClient.post('/api/v1/sync/settings', { wallet, syncEnabled: true });
  */
-export const apiClient = {
+const apiClient = {
+  request: apiRequest,
   get: apiGet,
   post: apiPost,
   patch: apiPatch,
   put: apiPut,
   delete: apiDelete,
+  configure: configureApiClient,
+  reset: resetApiClient,
 };
+
+export { apiClient };
+export default apiClient;

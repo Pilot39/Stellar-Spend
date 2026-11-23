@@ -25,6 +25,9 @@ const error = (...msgs) => process.stderr.write(msgs.join(' ') + '\n');
 // ──────────────────────────────────────────────────────────────────────────────
 const STORIES_GLOB_DIRS = [path.resolve(__dirname, '../src')];
 
+// Shared components that must each have a corresponding story file.
+const SHARED_COMPONENTS_DIR = path.resolve(__dirname, '../src/components');
+
 const STORY_EXTENSIONS = ['.stories.ts', '.stories.tsx', '.stories.js', '.stories.jsx'];
 const COMPONENT_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js'];
 
@@ -89,11 +92,33 @@ function importExists(storyFile, specifier) {
   return false;
 }
 
+/** Return true if the file path is a shared component source file (not a story/test). */
+function isSharedComponentFile(filePath) {
+  if (!COMPONENT_EXTENSIONS.some((ext) => filePath.endsWith(ext))) return false;
+  if (isStoryFile(filePath)) return false;
+  if (/\.(test|spec)\.[jt]sx?$/.test(filePath)) return false;
+  if (filePath.endsWith('.d.ts')) return false;
+  return true;
+}
+
+/** Return the expected story file path for a given component file. */
+function expectedStoryPath(componentFile) {
+  const ext = path.extname(componentFile);
+  return componentFile.slice(0, -ext.length) + '.stories.tsx';
+}
+
+/** Return true if a story file exists for the given component file. */
+function hasStory(componentFile) {
+  const base = componentFile.slice(0, -path.extname(componentFile).length);
+  return STORY_EXTENSIONS.some((ext) => fs.existsSync(base + ext));
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Main
 // ──────────────────────────────────────────────────────────────────────────────
 
 let orphans = [];
+let missingStories = [];
 
 for (const rootDir of STORIES_GLOB_DIRS) {
   const allFiles = walkDir(rootDir);
@@ -113,37 +138,66 @@ for (const rootDir of STORIES_GLOB_DIRS) {
   }
 }
 
+// Detect shared components that are missing a story file.
+if (fs.existsSync(SHARED_COMPONENTS_DIR)) {
+  for (const file of walkDir(SHARED_COMPONENTS_DIR)) {
+    if (!isSharedComponentFile(file)) continue;
+    if (!hasStory(file)) {
+      missingStories.push({ file, expected: expectedStoryPath(file) });
+    }
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Report
 // ──────────────────────────────────────────────────────────────────────────────
 
-if (orphans.length === 0) {
+if (orphans.length === 0 && missingStories.length === 0) {
   log('✅  No orphaned Storybook stories found.');
+  log('✅  All shared components have Storybook stories.');
   process.exit(0);
 }
 
-error(`\n⚠️  Found ${orphans.length} orphaned story file(s):\n`);
+if (orphans.length > 0) {
+  error(`\n⚠️  Found ${orphans.length} orphaned story file(s):\n`);
 
-for (const { file, missingImports } of orphans) {
-  const rel = path.relative(process.cwd(), file);
-  error(`  ${rel}`);
-  for (const imp of missingImports) {
-    error(`    └─ missing import: ${imp}`);
+  for (const { file, missingImports } of orphans) {
+    const rel = path.relative(process.cwd(), file);
+    error(`  ${rel}`);
+    for (const imp of missingImports) {
+      error(`    └─ missing import: ${imp}`);
+    }
+  }
+}
+
+if (missingStories.length > 0) {
+  error(`\n⚠️  Found ${missingStories.length} shared component(s) without a story:\n`);
+
+  for (const { file, expected } of missingStories) {
+    const rel = path.relative(process.cwd(), file);
+    const relExpected = path.relative(process.cwd(), expected);
+    error(`  ${rel}`);
+    error(`    └─ expected story: ${relExpected}`);
   }
 }
 
 if (FIX_MODE) {
-  log('\n🗑  Removing orphaned story files...');
-  for (const { file } of orphans) {
-    fs.unlinkSync(file);
-    const rel = path.relative(process.cwd(), file);
-    log(`  removed: ${rel}`);
+  if (orphans.length > 0) {
+    log('\n🗑  Removing orphaned story files...');
+    for (const { file } of orphans) {
+      fs.unlinkSync(file);
+      const rel = path.relative(process.cwd(), file);
+      log(`  removed: ${rel}`);
+    }
+  }
+  if (missingStories.length > 0) {
+    error('\n❌  Missing stories cannot be auto-generated; please add them manually.');
   }
   log('\n✅  Done.');
-  process.exit(0);
+  process.exit(missingStories.length > 0 ? 1 : 0);
 } else {
   error(
-    '\nRun with --fix to remove them automatically:',
+    '\nRun with --fix to remove orphaned stories automatically:',
     '\n  node scripts/check-orphaned-stories.js --fix\n',
   );
   process.exit(1);

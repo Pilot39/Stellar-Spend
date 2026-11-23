@@ -1,3 +1,4 @@
+import { randomHex } from '@/lib/crypto/ids';
 /**
  * Recurring transactions — schedule automatic periodic offramp payments.
  * Schedules are stored in localStorage; execution is triggered client-side.
@@ -68,11 +69,6 @@ export const systemClock: Clock = {
   now: () => Date.now(),
 };
 
-/** Builds a fixed clock for tests — now() always returns the same instant. */
-export function fixedClock(atMs: number): Clock {
-  return { now: () => atMs };
-}
-
 // ---------------------------------------------------------------------------
 // Pure helpers
 // ---------------------------------------------------------------------------
@@ -99,6 +95,10 @@ export function computeNextRunAt(from: number, frequency: RecurringFrequency): n
   return d.getTime();
 }
 
+/**
+ * Whether a schedule is due for execution (or retry) at the given clock time.
+ * Exported so the execution service can reuse it without duplicating logic.
+ */
 export function isDue(schedule: RecurringSchedule, clock: Clock = systemClock): boolean {
   if (schedule.paused) return false;
   if (schedule.maxExecutions !== undefined && schedule.executionCount >= schedule.maxExecutions)
@@ -235,7 +235,7 @@ export class RecurringStorage {
   }
 
   static generateId(): string {
-    return `rec_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    return `rec_${Date.now()}_${randomHex(4)}`;
   }
 
   private static _update(id: string, patch: Partial<RecurringSchedule>): void {

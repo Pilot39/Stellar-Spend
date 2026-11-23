@@ -18,6 +18,9 @@ const bundleOptimization = {
     '@allbridge/bridge-core-sdk',
     'viem',
     '@sentry/nextjs',
+    'lucide-react',
+    'date-fns',
+    'recharts',
   ],
 } as const;
 
@@ -156,7 +159,7 @@ const nextConfig: NextConfig = {
       config.performance = {
         hints: 'warning',
         maxEntrypointSize: 512 * 1024, // 512 KB
-        maxAssetSize: 512 * 1024,      // 512 KB
+        maxAssetSize: 512 * 1024, // 512 KB
       };
     }
     return config;

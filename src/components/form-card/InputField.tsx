@@ -2,6 +2,7 @@ import { ChangeEvent } from 'react';
 import { cn } from '@/lib/cn';
 import { Tooltip } from '@/components/Tooltip';
 import { Icon } from '@/components/Icon';
+import { getFieldState } from '@/lib/validation';
 
 export interface InputFieldProps {
   label: string;
@@ -19,6 +20,7 @@ export interface InputFieldProps {
   inputMode?: 'numeric' | 'decimal' | 'text';
   help?: string;
   validating?: boolean;
+  required?: boolean;
 }
 
 export function InputField({
@@ -37,15 +39,26 @@ export function InputField({
   inputMode,
   help,
   validating,
+  required,
 }: InputFieldProps) {
-  const showError = touched && !!error;
-  const showSuccess = touched && !error && !showError && !!success && !!value && !validating;
+  const { showError, showSuccess } = getFieldState({
+    error,
+    success,
+    touched,
+    value,
+    validating,
+  });
 
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
         <label htmlFor={id} className="text-[10px] tracking-[0.18em] text-[#777777] uppercase">
           {label}
+          {required && (
+            <span className="text-red-400 ml-1" aria-hidden="true">
+              *
+            </span>
+          )}
         </label>
         {help && (
           <Tooltip content={help} position="top">
@@ -76,16 +89,10 @@ export function InputField({
           placeholder={placeholder}
           disabled={disabled}
           inputMode={inputMode}
+          required={required}
+          aria-required={required ? 'true' : undefined}
           aria-invalid={showError ? 'true' : undefined}
-          aria-describedby={
-            showError
-              ? `${id}-error`
-              : showSuccess
-                ? `${id}-success`
-                : help
-                  ? `${id}-help`
-                  : undefined
-          }
+          aria-describedby={describedBy}
           className={cn(
             'w-full bg-[#0a0a0a] border px-3 py-2.5 text-sm text-white placeholder-[#444444]',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c9a962]',
@@ -103,12 +110,15 @@ export function InputField({
           {validating && (
             <span
               className="inline-block h-3 w-3 border-2 border-[#c9a962] border-t-transparent rounded-full animate-spin"
+              role="status"
               aria-label="Validating…"
             />
           )}
-          {!validating && showError && <Icon name="alert-circle" size={14} className="text-red-400" />}
+          {!validating && showError && (
+            <Icon name="alert-circle" size={14} className="text-red-400" aria-hidden="true" />
+          )}
           {!validating && showSuccess && (
-            <Icon name="check-circle" size={14} className="text-green-400" />
+            <Icon name="check-circle" size={14} className="text-green-400" aria-hidden="true" />
           )}
           {suffix && !showError && !showSuccess && !validating && (
             <span className="text-xs text-[#777777]">{suffix}</span>
@@ -121,7 +131,11 @@ export function InputField({
         </span>
       )}
       {showSuccess && (
-        <span id={`${id}-success`} className="text-[10px] text-green-400 tracking-wide">
+        <span
+          id={`${id}-success`}
+          role="status"
+          className="text-[10px] text-green-400 tracking-wide"
+        >
           {success}
         </span>
       )}

@@ -9,6 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Root directory cleanliness guard** (`__tests__/quality/root-directory-cleanliness.test.ts`) —
+  CI regression test that fails if any banned scratch/stale file pattern appears in the
+  repository root. Banned patterns are documented in `docs/scratch-file-convention.md` and
+  enforced in `.gitignore`. (#1541)
+- **Named application constants** (`src/lib/constants.ts`) — single-source-of-truth module
+  that re-exports all values from `CONFIG` (src/lib/config/) as flat named exports
+  (`BRIDGE_POLLING_INTERVAL_MS`, `CACHE_CURRENCY_TTL_MS`, `STELLAR_MIN_XLM_BALANCE`, etc.).
+  Prevents magic numbers from being duplicated across call sites. (#1542)
+- **Error-handling ESLint rules** — added `@typescript-eslint/no-floating-promises: error`
+  and `no-empty: ['error', { allowEmptyCatch: false }]` to `eslint.config.js`. Floating
+  promises and empty catch blocks now fail CI lint. Quality gate test added at
+  `__tests__/quality/eslint-error-handling-rules.test.ts`. (#1543)
+
+### Changed
+
+- **`docs/scratch-file-convention.md`** — rewritten with canonical table of allowed root
+  files, full list of gitignored scratch patterns, and guidance on where each content type
+  belongs (CHANGELOG, `docs/adr/`, `docs/runbooks/`, `scratch/`). (#1541)
+- **`.gitignore`** — added guards for `DELIVERABLES*.txt`, `ACCEPTANCE_VERIFICATION*.md`,
+  `ERROR_HANDLER_AUDIT*.md`, `*_COMPLETION_REPORT.md`, and `*_AUDIT.md` to prevent
+  recurrence of stale root file clutter. (#1541)
+- **`src/lib/index.ts`** — constants barrel now exported from the main lib index. (#1542)
+- **`CONTRIBUTING.md`** — added § "Constants and magic numbers" cross-referencing
+  `src/lib/constants.ts` and § "Error handling" cross-referencing the new ESLint rules
+  and the `_`-prefix convention for intentionally ignored errors. (#1544)
+
+### Removed
+
+- `task1.md`, `task2.md` — per-issue task notes (now gitignored). (#1541)
+- `DELIVERABLES.txt` — completion checklist from the error-handler project; relevant
+  content is preserved in this changelog. (#1541)
+- `ACCEPTANCE_VERIFICATION.md` — acceptance report; superseded by this changelog. (#1541)
+- `ERROR_HANDLER_AUDIT.md` — audit summary; superseded by this changelog. (#1541)
+
+### Added
+
 - **Operations runbook library** (`docs/runbooks/`) — master index with runbook
   template, escalation matrix, comms templates and post-incident-review process,
   plus runbooks for stuck bridge transactions, provider outages, database
@@ -86,3 +122,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `001_create_transactions.sql`/`002_add_transaction_analytics_fields.sql` (the
   `TEXT`-id, Stellar-native schema every route and repository actually uses). No
   duplicate migration-number prefixes remain in `migrations/`. (#784)
+- **Unused and deprecated API endpoints under `src/app/api/`** — audited the
+  route tree against access logs and test coverage and deleted the following
+  dead routes (no client call sites, no tests, superseded by the listed
+  replacements):
+
+  - `GET /api/transactions/legacy` → use `GET /api/transactions`
+  - `POST /api/transactions/legacy/sync` → use `POST /api/transactions/sync`
+  - `GET /api/wallet/balance-old` → use `GET /api/wallet/balance`
+  - `POST /api/auth/login-v1` → use `POST /api/auth/login`
+  - `GET /api/rates/deprecated` → use `GET /api/rates`
+  - `GET /api/health/ping` → use `GET /api/health`
+  - `POST /api/webhooks/stellar/old` → use `POST /api/webhooks/stellar`
+
+  All remaining routes under `src/app/api/` are unchanged, so this removal is
+  backwards compatible for every supported client. Regression tests assert each
+  removed path now returns `404` (see `src/app/api/__tests__/removed-endpoints.test.ts`).
+  (#1456)

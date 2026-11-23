@@ -7,16 +7,22 @@ export interface ComponentListProps {
 
 export function ComponentList({ components }: ComponentListProps) {
   return (
-    <div className="border border-[#333] bg-[#111] p-6 space-y-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wider">Components</h2>
-      <div className="space-y-3">
+    <section
+      aria-labelledby="components-heading"
+      className="border border-[#333] bg-[#111] p-6 space-y-4"
+    >
+      <h2 id="components-heading" className="text-sm font-semibold uppercase tracking-wider">
+        Components
+      </h2>
+      <ul aria-label="Component statuses" className="space-y-3">
         {components.map((component) => (
-          <div
+          <li
             key={component.name}
             className="flex items-center justify-between py-2 border-b border-[#222] last:border-0"
           >
             <div className="flex items-center gap-3">
-              <div
+              <span
+                aria-hidden="true"
                 className={cn(
                   'w-2 h-2 rounded-full',
                   component.status === 'operational'
@@ -30,21 +36,25 @@ export function ComponentList({ components }: ComponentListProps) {
             </div>
             <div className="flex items-center gap-4">
               {component.responseTime && (
-                <span className="text-xs text-[#777]">{component.responseTime}ms</span>
+                <span className="text-xs text-[#777]">
+                  <span className="sr-only">Response time: </span>
+                  {component.responseTime}ms
+                </span>
               )}
-              <span className="text-xs text-[#555]">{formatTime(component.lastCheck)}</span>
+              <span className="text-xs text-[#555]">
+                <span className="sr-only">Last checked: </span>
+                {formatTime(component.lastCheck)}
+              </span>
               <span
-                className={cn(
-                  'text-xs px-2 py-1 rounded border',
-                  getStatusColor(component.status),
-                )}
+                className={cn('text-xs px-2 py-1 rounded border', getStatusColor(component.status))}
               >
+                <span className="sr-only">Status: </span>
                 {getStatusText(component.status)}
               </span>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
-    </div>
+      </ul>
+    </section>
   );
 }

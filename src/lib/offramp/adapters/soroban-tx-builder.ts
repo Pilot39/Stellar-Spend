@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger';
-import * as StellarSdk from '@stellar/stellar-sdk';
+import * as StellarSdk from '@/lib/stellar/sdk';
 import { randomBytes } from 'crypto';
 
 interface AuthEntry {
@@ -78,7 +78,7 @@ interface BuildSwapAndBridgeTxParams {
 /**
  * Build Soroban swap_and_bridge transaction
  */
-export async function buildSwapAndBridgeTx(params: BuildSwapAndBridgeTxParams): Promise<string> {
+async function buildSwapAndBridgeTx(params: BuildSwapAndBridgeTxParams): Promise<string> {
   const {
     rpcUrl,
     sourceAccountPublicKey,

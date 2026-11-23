@@ -2,16 +2,22 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { useForm } from '@/hooks/useForm';
+import { randomHexUpper } from '@/lib/crypto/ids';
 import { apiPatch } from '@/lib/api/client';
-import {
-  type InsuranceClaimFormProps,
-  insuranceClaimSchema,
-} from './insurance-claim/types';
+import { useTranslations } from '@/hooks/useTranslations';
+import { type InsuranceClaimFormProps } from './insurance-claim/types';
 import { ClaimFormHeader } from './insurance-claim/ClaimFormHeader';
 import { EligibilityState } from './insurance-claim/EligibilityState';
 import { ClaimFormFields } from './insurance-claim/ClaimFormFields';
+import { useInsuranceClaimForm } from '@/hooks/useInsuranceClaimForm';
 
 export * from './insurance-claim/types';
+
+const MOCK_INSURANCE_ID_PREFIX = 'ins_';
+const MOCK_SUBMIT_DELAY_MS = 1000;
+const ELIGIBILITY_CHECK_DELAY_MS = 1500;
+const CLAIM_ID_FALLBACK = 'CLAIM-FILED';
+const CLAIM_ID_RANDOM_LENGTH = 4;
 
 export function InsuranceClaimForm({
   transactionId,
@@ -25,12 +31,16 @@ export function InsuranceClaimForm({
   const [isEligible, setIsEligible] = useState<boolean | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
+  const { t } = useTranslations();
 
   const {
     values,
-    isSubmitting: loading,
-    submitError,
-    errors,
+    error,
+    loading,
+    isCheckingEligibility: hookIsCheckingEligibility,
+    isEligible: hookIsEligible,
+    selectedFile: hookSelectedFile,
+    filePreview: hookFilePreview,
     setFieldValue,
     setSubmitError,
     handleSubmit: submitForm,
@@ -43,9 +53,9 @@ export function InsuranceClaimForm({
     onSubmit: async (formValues) => {
       if (!isEligible) return;
 
-      if (insuranceId.startsWith('ins_')) {
-        await new Promise((r) => setTimeout(r, 1000));
-        onSuccess(`CLAIM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`);
+      if (insuranceId.startsWith(MOCK_INSURANCE_ID_PREFIX)) {
+        await new Promise((r) => setTimeout(r, MOCK_SUBMIT_DELAY_MS));
+        onSuccess(`CLAIM-${Date.now()}-${randomHexUpper(CLAIM_ID_RANDOM_LENGTH)}`);
         return;
       }
 
@@ -58,9 +68,20 @@ export function InsuranceClaimForm({
         },
       );
 
-      const claimId = data?.claim?.claim_id ?? data?.claim?.id ?? 'CLAIM-FILED';
+      const claimId = data?.claim?.claim_id ?? data?.claim?.id ?? CLAIM_ID_FALLBACK;
       onSuccess(claimId);
     },
+  });
+
+  const {
+    setFileError: setHookFileError,
+    handleFileSelect: hookHandleFileSelect,
+    handleSubmit: hookHandleSubmit,
+  } = useInsuranceClaimForm({
+    transactionId,
+    insuranceId,
+    onSuccess,
+    onCancel,
   });
 
   const error = fileError || submitError || errors.reason;
@@ -68,7 +89,7 @@ export function InsuranceClaimForm({
   useEffect(() => {
     const check = async () => {
       setIsCheckingEligibility(true);
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, ELIGIBILITY_CHECK_DELAY_MS));
       setIsEligible(true);
       setIsCheckingEligibility(false);
     };
@@ -103,9 +124,12 @@ export function InsuranceClaimForm({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="claim-form-title"
+      aria-label={t('insuranceClaim.dialogLabel')}
+      aria-describedby="claim-form-description"
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
     >
       <div
@@ -115,6 +139,10 @@ export function InsuranceClaimForm({
       />
 
       <div className="relative z-10 w-full max-w-md border border-[#333333] bg-[#0a0a0a] p-6 flex flex-col gap-5 shadow-2xl">
+        <p id="claim-form-description" className="sr-only">
+          File an insurance claim for this transaction. Use Tab to move between fields and Escape to
+          cancel.
+        </p>
         <ClaimFormHeader coverage={coverage} onCancel={onCancel} />
 
         {isCheckingEligibility || !isEligible ? (
@@ -143,5 +171,3 @@ export function InsuranceClaimForm({
     </div>
   );
 }
-
-export default InsuranceClaimForm;

@@ -3,6 +3,7 @@ import { ipWhitelistService } from '@/lib/ip-whitelist';
 import { logger } from '@/lib/logger';
 import { ErrorHandler } from '@/lib/error-handler';
 import { ApiError, ErrorType } from '@/lib/error-types';
+import { parsePaginationQuery } from '@/lib/pagination';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,8 +12,10 @@ export async function GET(request: NextRequest) {
       return ErrorHandler.validation('User address required');
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const limit = Math.min(Number(searchParams.get('limit')) || 50, 500);
+    const { limit } = parsePaginationQuery(request.nextUrl.searchParams, {
+      defaultLimit: 50,
+      maxLimit: 500,
+    });
 
     const violations = await ipWhitelistService.getViolations(userAddress, limit);
     return NextResponse.json({ violations, count: violations.length });

@@ -5,8 +5,16 @@ interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: 'default' | 'success' | 'warning' | 'error' | 'info';
 }
 
+const variantLabels: Record<NonNullable<BadgeProps['variant']>, string> = {
+  default: 'Default',
+  success: 'Success',
+  warning: 'Warning',
+  error: 'Error',
+  info: 'Info',
+};
+
 export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
-  ({ className, variant = 'default', ...props }, ref) => {
+  ({ className, variant = 'default', 'aria-label': ariaLabel, ...props }, ref) => {
     const variantStyles = {
       default: 'bg-gray-100 text-gray-800',
       success: 'bg-green-100 text-green-800',
@@ -18,6 +26,8 @@ export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
     return (
       <span
         ref={ref}
+        role="status"
+        aria-label={ariaLabel ?? variantLabels[variant]}
         className={cn(
           'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
           variantStyles[variant],

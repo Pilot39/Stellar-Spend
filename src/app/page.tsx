@@ -1,7 +1,16 @@
 import { Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import Hero from '@/components/Hero';
 import Features from '@/components/Features';
-import DashboardClient from '@/components/DashboardClient';
+
+// Lazy-load the heavy interactive dashboard so its JS is split into a
+// separate chunk and only fetched when needed. `ssr: false` avoids
+// hydrating wallet/form logic on the server; the Suspense skeleton below
+// provides the loading fallback while the chunk downloads.
+const DashboardClient = dynamic(() => import('@/components/DashboardClient'), {
+  ssr: false,
+  loading: () => <DashboardSkeleton />,
+});
 
 /**
  * Main Page - Server Component with Suspense streaming

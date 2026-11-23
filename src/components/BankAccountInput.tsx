@@ -2,11 +2,8 @@
 
 import { useState, useCallback } from 'react';
 import { cn } from '@/lib/cn';
-import {
-  validateBankField,
-  type BankFieldType,
-  type ValidationResult,
-} from '@/lib/bank-validation';
+import { useTranslations } from '@/lib/i18n';
+import { validateBankField, type BankFieldType, type ValidationResult } from '@/lib/validation';
 
 interface BankFieldProps {
   type: BankFieldType;
@@ -17,17 +14,30 @@ interface BankFieldProps {
   disabled?: boolean;
 }
 
-const DEFAULTS: Record<BankFieldType, { label: string; placeholder: string; maxLength: number }> = {
-  account: { label: 'Account Number', placeholder: 'e.g. 0123456789', maxLength: 20 },
-  routing: { label: 'Routing Number (ABA)', placeholder: '9-digit ABA number', maxLength: 9 },
-  iban: { label: 'IBAN', placeholder: 'e.g. GB29NWBK60161331926819', maxLength: 34 },
+const MAX_LENGTHS: Record<BankFieldType, number> = {
+  account: 20,
+  routing: 9,
+  iban: 34,
+};
+
+const LABEL_KEYS: Record<BankFieldType, string> = {
+  account: 'bank.field.account.label',
+  routing: 'bank.field.routing.label',
+  iban: 'bank.field.iban.label',
+};
+
+const PLACEHOLDER_KEYS: Record<BankFieldType, string> = {
+  account: 'bank.field.account.placeholder',
+  routing: 'bank.field.routing.placeholder',
+  iban: 'bank.field.iban.placeholder',
 };
 
 export function BankField({ type, value, onChange, label, placeholder, disabled }: BankFieldProps) {
+  const t = useTranslations();
   const [touched, setTouched] = useState(false);
   const [result, setResult] = useState<ValidationResult>({ valid: true });
 
-  const defaults = DEFAULTS[type];
+  const maxLength = MAX_LENGTHS[type];
 
   const handleChange = useCallback(
     (raw: string) => {
@@ -45,12 +55,16 @@ export function BankField({ type, value, onChange, label, placeholder, disabled 
   const showError = touched && !result.valid;
   const showSuccess = touched && result.valid && value.trim().length > 0;
 
-  const borderColorClass = showError ? 'border-error' : showSuccess ? 'border-success' : 'border-line';
+  const borderColorClass = showError
+    ? 'border-error'
+    : showSuccess
+      ? 'border-success'
+      : 'border-line';
 
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={`bank-field-${type}`} className="text-[11px] text-muted tracking-[0.08em]">
-        {label ?? defaults.label}
+        {label ?? t(LABEL_KEYS[type])}
       </label>
 
       <div
@@ -65,10 +79,11 @@ export function BankField({ type, value, onChange, label, placeholder, disabled 
           value={value}
           onChange={(e) => handleChange(e.target.value)}
           onBlur={handleBlur}
-          placeholder={placeholder ?? defaults.placeholder}
-          maxLength={defaults.maxLength}
+          placeholder={placeholder ?? t(PLACEHOLDER_KEYS[type])}
+          maxLength={maxLength}
           disabled={disabled}
           aria-invalid={showError}
+          aria-required
           aria-describedby={showError ? `bank-field-${type}-error` : undefined}
           data-testid={type === 'account' ? 'account-number-input' : `bank-field-${type}-input`}
           className={cn(
@@ -77,12 +92,12 @@ export function BankField({ type, value, onChange, label, placeholder, disabled 
           )}
         />
         {showSuccess && (
-          <span className="text-success text-sm shrink-0" aria-hidden>
+          <span className="text-success text-sm shrink-0" aria-hidden="true">
             ✓
           </span>
         )}
         {showError && (
-          <span className="text-error text-sm shrink-0" aria-hidden>
+          <span className="text-error text-sm shrink-0" aria-hidden="true">
             ✕
           </span>
         )}
@@ -115,11 +130,13 @@ interface BankAccountInputProps {
   disabled?: boolean;
 }
 
-const MODE_LABELS: Record<BankMode, string> = {
-  local: 'Local',
-  us: 'US (ABA)',
-  iban: 'IBAN',
+const MODE_LABEL_KEYS: Record<BankMode, string> = {
+  local: 'bank.mode.local',
+  us: 'bank.mode.us',
+  iban: 'bank.mode.iban',
 };
+
+const MODES: BankMode[] = ['local', 'us', 'iban'];
 
 export function BankAccountInput({
   mode,
@@ -132,59 +149,101 @@ export function BankAccountInput({
   onIbanChange,
   disabled,
 }: BankAccountInputProps) {
+  const t = useTranslations();
+
   return (
     <div className="flex flex-col gap-3">
       {/* Mode tabs */}
-      <div className="flex gap-0 border-b border-line">
-        {(['local', 'us', 'iban'] as BankMode[]).map((m) => (
+      <div
+        role="tablist"
+        aria-label="Bank account format"
+        className="flex gap-0 border-b border-line"
+      >
+        {MODES.map((m) => (
           <button
             key={m}
+            type="button"
+            role="tab"
+            id={`bank-mode-tab-${m}`}
+            aria-selected={mode === m}
+            aria-controls={`bank-mode-panel-${m}`}
+            tabIndex={mode === m ? 0 : -1}
             onClick={() => onModeChange(m)}
+            onKeyDown={(e) => {
+              const modes: BankMode[] = ['local', 'us', 'iban'];
+              const idx = modes.indexOf(m);
+              if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                e.preventDefault();
+                const next =
+                  e.key === 'ArrowRight'
+                    ? modes[(idx + 1) % modes.length]
+                    : modes[(idx - 1 + modes.length) % modes.length];
+                onModeChange(next);
+                document.getElementById(`bank-mode-tab-${next}`)?.focus();
+              } else if (e.key === 'Home') {
+                e.preventDefault();
+                onModeChange(modes[0]);
+                document.getElementById(`bank-mode-tab-${modes[0]}`)?.focus();
+              } else if (e.key === 'End') {
+                e.preventDefault();
+                const last = modes[modes.length - 1];
+                onModeChange(last);
+                document.getElementById(`bank-mode-tab-${last}`)?.focus();
+              }
+            }}
+            disabled={disabled}
             className={cn(
               'text-[11px] px-3.5 py-1.5 border-0 border-b-2 bg-transparent cursor-pointer -mb-px tracking-[0.06em]',
               mode === m ? 'border-accent text-accent' : 'border-transparent text-muted',
             )}
           >
-            {MODE_LABELS[m]}
+            {t(MODE_LABEL_KEYS[m])}
           </button>
         ))}
       </div>
 
       {/* Fields */}
-      {mode === 'local' && (
-        <BankField
-          type="account"
-          value={accountNumber}
-          onChange={onAccountNumberChange}
-          disabled={disabled}
-        />
-      )}
-
-      {mode === 'us' && (
-        <>
-          <BankField
-            type="routing"
-            value={routingNumber}
-            onChange={onRoutingNumberChange ?? (() => {})}
-            disabled={disabled}
-          />
+      <div
+        role="tabpanel"
+        id={`bank-mode-panel-${mode}`}
+        aria-labelledby={`bank-mode-tab-${mode}`}
+        className="flex flex-col gap-3"
+      >
+        {mode === 'local' && (
           <BankField
             type="account"
             value={accountNumber}
             onChange={onAccountNumberChange}
             disabled={disabled}
           />
-        </>
-      )}
+        )}
 
-      {mode === 'iban' && (
-        <BankField
-          type="iban"
-          value={iban}
-          onChange={onIbanChange ?? (() => {})}
-          disabled={disabled}
-        />
-      )}
+        {mode === 'us' && (
+          <>
+            <BankField
+              type="routing"
+              value={routingNumber}
+              onChange={onRoutingNumberChange ?? (() => {})}
+              disabled={disabled}
+            />
+            <BankField
+              type="account"
+              value={accountNumber}
+              onChange={onAccountNumberChange}
+              disabled={disabled}
+            />
+          </>
+        )}
+
+        {mode === 'iban' && (
+          <BankField
+            type="iban"
+            value={iban}
+            onChange={onIbanChange ?? (() => {})}
+            disabled={disabled}
+          />
+        )}
+      </div>
     </div>
   );
 }

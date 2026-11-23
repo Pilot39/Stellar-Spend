@@ -70,6 +70,9 @@ const REDACT_KEYS = new Set([
   'accountname',
   'account_name',
   'beneficiary_account_name',
+  // PII — contact details (#1474)
+  'email',
+  'phone',
   // PII — user addresses and wallet identifiers (#802)
   'useraddress',
   'user_address',
@@ -98,6 +101,26 @@ function maskPii(value: string): string {
   return out;
 }
 
+// Matches compound names such as `accessTokenId` or `clientSecret` that REDACT_KEYS misses (#1474).
+const SENSITIVE_KEY_FRAGMENTS = [
+  'secret',
+  'password',
+  'privatekey',
+  'private_key',
+  'apikey',
+  'api_key',
+  'accesstoken',
+  'access_token',
+  'refreshtoken',
+  'refresh_token',
+  'authorization',
+];
+
+function isSensitiveKey(key: string): boolean {
+  const k = key.toLowerCase();
+  return REDACT_KEYS.has(k) || SENSITIVE_KEY_FRAGMENTS.some((fragment) => k.includes(fragment));
+}
+
 function redact(obj: unknown, depth = 0): unknown {
   if (depth > 6 || obj === null || typeof obj !== 'object') {
     if (typeof obj === 'string') return maskPii(obj);
@@ -106,7 +129,7 @@ function redact(obj: unknown, depth = 0): unknown {
   if (Array.isArray(obj)) return obj.map((v) => redact(v, depth + 1));
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-    out[k] = REDACT_KEYS.has(k.toLowerCase()) ? '[REDACTED]' : redact(v, depth + 1);
+    out[k] = isSensitiveKey(k) ? '[REDACTED]' : redact(v, depth + 1);
   }
   return out;
 }

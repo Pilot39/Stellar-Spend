@@ -1,5 +1,9 @@
 # Architecture Diagrams
 
+> **Decision records:** see [`docs/adr/`](../adr/README.md) for the ADRs that explain _why_
+> the architecture looks the way it does. The off-ramp flow is documented in
+> [ADR-0001](../adr/0001-offramp-flow.md).
+
 All diagrams on this page are the **single source of truth** for the system architecture.
 They are checked in CI via `scripts/check-diagrams.sh` — never let them drift from the real code.
 
@@ -248,3 +252,11 @@ flowchart LR
     S & RF & EX --> N[Emit notification event]
     N --> NS[NotificationService → Email / SMS / Push]
 ```
+
+---
+
+## Related Decision Records
+
+The rationale behind the off-ramp flow (Stellar → Allbridge → Base USDC → Paycrest payout)
+is captured in [ADR-0001: Off-Ramp Flow Architecture](../adr/0001-offramp-flow.md).
+The diagrams above are the visual source of truth; the ADR is the decision source of truth.

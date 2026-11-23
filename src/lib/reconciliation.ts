@@ -341,7 +341,7 @@ export async function performManualReconciliation(
     resolvedBy: action.resolvedBy,
   });
 
-   if (action.action === 'retry') {
+  if (action.action === 'retry') {
     const txModule = await import('./transaction-timeout');
     try {
       await txModule.attemptTimeoutRecovery(action.transactionId);
@@ -350,6 +350,11 @@ export async function performManualReconciliation(
         message: `Manual retry initiated for transaction ${action.transactionId}`,
       };
     } catch (err) {
+      logger.error(
+        'reconciliation.manual_retry_failed',
+        { transactionId: action.transactionId },
+        err,
+      );
       return {
         success: false,
         message: `Manual retry failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -407,7 +412,9 @@ async function cleanOldHistory(): Promise<void> {
   const sql = `DELETE FROM reconciliation_history WHERE run_at < NOW() - INTERVAL '90 days'`;
   try {
     await pool.query(sql);
-  } catch {}
+  } catch (err) {
+    logger.error('reconciliation.clean_history_failed', {}, err);
+  }
 }
 
 export async function getReconciliationHistory(): Promise<ReconciliationHistoryEntry[]> {
@@ -416,14 +423,20 @@ export async function getReconciliationHistory(): Promise<ReconciliationHistoryE
   try {
     const result = await pool.query(sql);
     return result.rows.map(
-      (row: { id: string; run_at: string | Date; report: ReconciliationReport; alerts: ReconciliationAlert[] }) => ({
+      (row: {
+        id: string;
+        run_at: string | Date;
+        report: ReconciliationReport;
+        alerts: ReconciliationAlert[];
+      }) => ({
         id: row.id,
         runAt: new Date(row.run_at).toISOString(),
         report: row.report,
         alerts: row.alerts,
       }),
     );
-  } catch {
+  } catch (err) {
+    logger.error('reconciliation.fetch_daily_records_failed', {}, err);
     return [];
   }
 }
@@ -452,7 +465,7 @@ export async function runReconciliationJob(
   return entry;
 }
 
-export async function aggregateRecordsByDay(
+async function aggregateRecordsByDay(
   stellarTxs: string[],
   baseTxs: string[],
   paycrestOrders: string[],
@@ -486,12 +499,13 @@ export async function fetchDailyRecords(): Promise<ReconciliationRecord[]> {
         currency: tx.currency,
         timestamp: new Date(tx.timestamp).toISOString(),
       }));
-  } catch {
+  } catch (err) {
+    logger.error('reconciliation.get_history_failed', {}, err);
     return [];
   }
 }
 
-export async function runDailyReconciliation(): Promise<any> {
+async function runDailyReconciliation(): Promise<any> {
   const records = await fetchDailyRecords();
   const entry = await runReconciliationJob(records);
   const history = await getReconciliationHistory();

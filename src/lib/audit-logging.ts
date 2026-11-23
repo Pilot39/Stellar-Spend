@@ -94,7 +94,7 @@ export class AuditLoggingService {
       ],
     );
 
-    logger.info(`Audit log created`, {
+    logger.info('Audit log created', {
       auditId: id,
       actionType,
       resourceType,
@@ -176,7 +176,7 @@ export class AuditLoggingService {
       },
     ]);
 
-    logger.info(`Audit log created with integrity check`, {
+    logger.info('Audit log created with integrity check', {
       auditId: id,
       actionType,
       resourceType,
@@ -213,7 +213,7 @@ export class AuditLoggingService {
       ],
     );
 
-    logger.warn(`Admin action logged`, {
+    logger.warn('Admin action logged', {
       adminId: id,
       adminAddress,
       actionType,
@@ -353,7 +353,7 @@ export class AuditLoggingService {
 
     const result = await pool.query(`DELETE FROM audit_logs WHERE created_at < $1`, [cutoffTime]);
 
-    logger.info(`Old audit logs cleaned up`, {
+    logger.info('Old audit logs cleaned up', {
       count: result.rowCount,
       retentionDays,
     });
@@ -372,7 +372,7 @@ export class AuditLoggingService {
       [id, retentionDays, now],
     );
 
-    logger.info(`Audit log retention policy updated`, {
+    logger.info('Audit log retention policy updated', {
       retentionDays,
     });
   }
@@ -548,7 +548,29 @@ export class AuditLoggingService {
 
   verifyLogIntegrity(log: AuditLog, storedHash: string): boolean {
     const expected = this.computeLogIntegrityHash(log);
-    return crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(storedHash, 'hex'));
+    const expectedBuf = Buffer.from(expected, 'hex');
+    const storedBuf = Buffer.from(storedHash, 'hex');
+
+    if (expectedBuf.length !== storedBuf.length) {
+      logger.error('Audit log integrity verification failed', {
+        auditId: log.id,
+        actionType: log.actionType,
+        resourceType: log.resourceType,
+        reason: 'hash_length_mismatch',
+      });
+      return false;
+    }
+
+    const isValid = crypto.timingSafeEqual(expectedBuf, storedBuf);
+    if (!isValid) {
+      logger.error('Audit log integrity verification failed', {
+        auditId: log.id,
+        actionType: log.actionType,
+        resourceType: log.resourceType,
+        reason: 'hash_mismatch',
+      });
+    }
+    return isValid;
   }
 }
 

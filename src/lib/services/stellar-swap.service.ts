@@ -3,7 +3,7 @@
  * Uses Stellar path payment strict send to swap USDC <-> USDT before off-ramp.
  */
 
-import { Asset, TransactionBuilder, Operation, Networks, Account } from '@stellar/stellar-sdk';
+import { Asset, TransactionBuilder, Operation, Networks, Account } from '@/lib/stellar/sdk';
 
 export interface StellarSwapQuote {
   fromSymbol: string;

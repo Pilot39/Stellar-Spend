@@ -3,6 +3,7 @@ import { ipWhitelistService } from '@/lib/ip-whitelist';
 import { logger } from '@/lib/logger';
 import { ErrorHandler } from '@/lib/error-handler';
 import { ApiError, ErrorType } from '@/lib/error-types';
+import { auditLoggingService } from '@/lib/audit-logging';
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,6 +37,10 @@ export async function POST(request: NextRequest) {
     }
 
     const entry = await ipWhitelistService.addIPAddress(userAddress, ipAddress, label);
+    // A failed audit write is logged, not returned to the caller (#1471)
+    await auditLoggingService
+      .logAdminAction(userAddress, 'ip_whitelist.add', { actionDetails: ipAddress, reason: label })
+      .catch((error) => logger.error('Failed to write IP whitelist audit entry', { error }));
     return NextResponse.json({ entry }, { status: 201 });
   } catch (error) {
     logger.error('Failed to add IP address', { error });

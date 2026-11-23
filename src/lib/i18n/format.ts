@@ -51,3 +51,86 @@ export function formatCurrencyAmount(amount: number, currency: string, language:
     return `${formatNumber(amount, language)} ${currency}`;
   }
 }
+
+/**
+ * Formats a date using only date fields (no time). Useful for localized
+ * date-only values such as due dates or deadlines introduced by extraction.
+ */
+export function formatDateOnly(
+  date: Date | number,
+  language: Language,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  return new Intl.DateTimeFormat(localeFor(language), {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    ...options,
+  }).format(date);
+}
+
+/**
+ * Formats a date using only time fields. Useful for localized time-only
+ * values such as timestamps or durations introduced by extraction.
+ */
+export function formatTimeOnly(
+  date: Date | number,
+  language: Language,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  return new Intl.DateTimeFormat(localeFor(language), {
+    hour: '2-digit',
+    minute: '2-digit',
+    ...options,
+  }).format(date);
+}
+
+/**
+ * Formats a number as a percentage. Accepts a fraction (0.25 => 25%) by
+ * default; pass `isFraction: false` to treat the input as already scaled.
+ */
+export function formatPercent(
+  value: number,
+  language: Language,
+  options?: Intl.NumberFormatOptions & { isFraction?: boolean },
+): string {
+  const { isFraction = true, ...numberOptions } = options ?? {};
+  const scaled = isFraction ? value : value / 100;
+  return new Intl.NumberFormat(localeFor(language), {
+    style: 'percent',
+    maximumFractionDigits: 1,
+    ...numberOptions,
+  }).format(scaled);
+}
+
+/**
+ * Formats a relative time (e.g. "3 days ago") using Intl.RelativeTimeFormat.
+ * `value` is the offset in `unit` units relative to now (negative = past).
+ */
+export function formatRelativeTime(
+  value: number,
+  unit: Intl.RelativeTimeFormatUnit,
+  language: Language,
+  options?: Intl.RelativeTimeFormatOptions,
+): string {
+  return new Intl.RelativeTimeFormat(localeFor(language), {
+    numeric: 'auto',
+    ...options,
+  }).format(value, unit);
+}
+
+/**
+ * Formats a plain list of items using locale-aware list separators
+ * (e.g. "a, b, and c"). Useful for localized enumerations in messages.
+ */
+export function formatList(
+  items: readonly string[],
+  language: Language,
+  options?: Intl.ListFormatOptions,
+): string {
+  return new Intl.ListFormat(localeFor(language), {
+    style: 'long',
+    type: 'conjunction',
+    ...options,
+  }).format(items);
+}

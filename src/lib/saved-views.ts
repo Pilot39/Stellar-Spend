@@ -1,3 +1,4 @@
+import { randomHex } from '@/lib/crypto/ids';
 import type { SearchFilters } from '@/lib/transactions';
 
 export interface SavedView {
@@ -56,7 +57,7 @@ function writeAll(views: SavedView[]): void {
   }
 }
 
-export class SavedViewsStorage {
+class SavedViewsStorage {
   // Persisted locally for now; cross-device sync is tracked separately (#1).
   // save() always appends, so reversing gives most-recently-created first
   // without relying on Date.now() ties (saves in the same millisecond).
@@ -66,7 +67,7 @@ export class SavedViewsStorage {
 
   static save(name: string, filters: SearchFilters): SavedView {
     const view: SavedView = {
-      id: `view_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: `view_${Date.now()}_${randomHex(5)}`,
       name,
       filters,
       createdAt: Date.now(),

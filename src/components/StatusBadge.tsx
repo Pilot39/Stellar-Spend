@@ -122,12 +122,14 @@ export function StatusBadge({ status, showIcon = true, className }: StatusBadgeP
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const config = STATUS_CONFIG[status] ?? FALLBACK_CONFIG;
   const variant = STATUS_VARIANTS[status] ?? 'neutral';
+  const tooltipId = `status-badge-tooltip-${status}`;
 
   return (
     <span className="relative inline-flex items-center">
       <span
         role="status"
         aria-label={`Transaction status: ${config.label}`}
+        aria-describedby={tooltipVisible ? tooltipId : undefined}
         title={config.tooltip}
         onMouseEnter={() => setTooltipVisible(true)}
         onMouseLeave={() => setTooltipVisible(false)}
@@ -159,6 +161,7 @@ export function StatusBadge({ status, showIcon = true, className }: StatusBadgeP
       {/* Tooltip */}
       {tooltipVisible && (
         <span
+          id={tooltipId}
           role="tooltip"
           className={cn(
             'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-10',

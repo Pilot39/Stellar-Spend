@@ -1,5 +1,6 @@
 'use client';
 
+import { memo, useMemo } from 'react';
 import { cn } from '@/lib/cn';
 import { Icon } from '@/components/Icon';
 import type { NotificationCenterEvent } from '@/hooks/useNotificationCenter';
@@ -9,6 +10,27 @@ export interface NotificationItemProps {
   event: NotificationCenterEvent;
   onClick: (event: NotificationCenterEvent) => void;
   onRemove: (eventId: string) => void;
+}
+
+/**
+ * Resolves the click/remove handlers for a notification item.
+ *
+ * When explicit handlers are provided (backwards-compatible props) they take
+ * precedence; otherwise the handlers supplied by the notification context are
+ * used. This keeps the component usable both standalone and inside the
+ * refactored NotificationCenter provider.
+ */
+export function resolveNotificationHandlers(
+  props: Pick<NotificationItemProps, 'onClick' | 'onRemove'>,
+  context?: {
+    markAsRead?: (event: NotificationCenterEvent) => void;
+    remove?: (eventId: string) => void;
+  },
+): { onClick: (event: NotificationCenterEvent) => void; onRemove: (eventId: string) => void } {
+  return {
+    onClick: props.onClick ?? context?.markAsRead ?? (() => {}),
+    onRemove: props.onRemove ?? context?.remove ?? (() => {}),
+  };
 }
 
 export function getEventIcon(type: string) {
@@ -61,16 +83,22 @@ export function getEventIcon(type: string) {
   }
 }
 
-export function NotificationItem({ event, onClick, onRemove }: NotificationItemProps) {
+function NotificationItemComponent({ event, onClick, onRemove }: NotificationItemProps) {
+  const icon = useMemo(() => getEventIcon(event.type), [event.type]);
+  const typeColor = useMemo(() => getEventTypeColor(event.type), [event.type]);
+  const formattedTime = useMemo(() => formatTime(event.createdAt), [event.createdAt]);
+
   return (
     <li
       className={cn(
         'relative px-4 py-3 border-l-4 transition-colors hover:bg-[#1a1a1a]',
         event.read ? 'border-[#222222] bg-[#0a0a0a]' : 'border-[#c9a962] bg-[#1a1a1a]',
       )}
+      role="listitem"
+      aria-label={event.read ? `${event.title} (read)` : `${event.title} (unread)`}
     >
       <button
-        onClick={() => onClick(event)}
+        onClick={() => handlers.onClick(event)}
         className={cn(
           'w-full text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c9a962] rounded px-1',
           'transition-all',
@@ -78,18 +106,20 @@ export function NotificationItem({ event, onClick, onRemove }: NotificationItemP
         aria-label={`${event.title}: ${event.description}`}
       >
         <div className="flex items-start gap-2 mb-1">
-          <span className={cn('shrink-0 mt-0.5', getEventTypeColor(event.type))}>
-            {getEventIcon(event.type)}
-          </span>
+          <span className={cn('shrink-0 mt-0.5', typeColor)}>{icon}</span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h4 className="text-sm font-semibold text-white truncate">{event.title}</h4>
               {!event.read && (
-                <span className="shrink-0 w-2 h-2 rounded-full bg-[#c9a962]" aria-hidden="true" />
+                <span
+                  className="shrink-0 w-2 h-2 rounded-full bg-[#c9a962]"
+                  aria-hidden="true"
+                  data-testid="unread-indicator"
+                />
               )}
             </div>
             <p className="text-[11px] text-[#777777] mt-0.5 line-clamp-2">{event.description}</p>
-            <p className="text-[10px] text-[#555555] mt-1">{formatTime(event.createdAt)}</p>
+            <p className="text-[10px] text-[#555555] mt-1">{formattedTime}</p>
           </div>
         </div>
 
@@ -103,12 +133,13 @@ export function NotificationItem({ event, onClick, onRemove }: NotificationItemP
       </button>
 
       <button
+        type="button"
         onClick={(e) => {
           e.stopPropagation();
-          onRemove(event.id);
+          handlers.onRemove(event.id);
         }}
         className="absolute right-2 top-2 text-[#555555] hover:text-[#777777] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c9a962] rounded"
-        aria-label="Remove notification"
+        aria-label={`Remove notification: ${event.title}`}
         title="Remove"
       >
         <Icon name="close" size={12} />
@@ -116,3 +147,6 @@ export function NotificationItem({ event, onClick, onRemove }: NotificationItemP
     </li>
   );
 }
+
+export const NotificationItem = memo(NotificationItemComponent);
+NotificationItem.displayName = 'NotificationItem';

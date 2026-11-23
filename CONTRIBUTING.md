@@ -56,6 +56,7 @@ npm run dev
 ### Run checks before committing
 
 ### Creating Scratch Files
+
 ```bash
 npm run lint             # ESLint
 npm run format:check     # Prettier
@@ -95,7 +96,7 @@ cargo audit --deny warnings
 
 **Set up local pre-commit hooks (optional but recommended):**
 
-The project supports two pre-commit hook systems. Either one will enforce lint, TypeScript type-check, and formatting checks before each commit.
+The project supports two pre-commit hook systems. Either one will lint and format the files you stage before each commit, so violations are caught locally instead of in review.
 
 **Option A — pre-commit framework (Python):**
 
@@ -108,14 +109,25 @@ pre-commit install
 
 ```bash
 npm install
-npx husky install
-npx husky add .husky/pre-commit "npm run lint && npm run type:check && npm run format:check"
 ```
 
-The pre-commit hooks run:
-1. `npm run lint` — ESLint checks
-2. `npm run type:check` — TypeScript type-checking (`tsc --noEmit`)
-3. `npm run format:check` — Prettier formatting check
+`npm install` runs the `prepare` script, which installs Husky and registers the hooks automatically. You do not need to run `npx husky install` or add the hook by hand.
+
+The Husky `pre-commit` hook runs:
+
+1. **gitleaks** — blocks the commit if secrets are detected in the working tree.
+2. **lint-staged** — runs ESLint (`--fix`) and Prettier (`--write`) on **staged files only**, then re-stages the fixes.
+
+Staged-file rules are declared under `"lint-staged"` in `package.json`:
+
+- `*.{js,jsx,ts,tsx,mjs,cjs}` — `eslint --fix`, then `prettier --write`
+- `*.{json,md,css,scss,yml,yaml,html}` — `prettier --write`
+
+Because lint-staged only touches staged files, commits stay fast even in large working trees. Unstaged changes are never modified.
+
+**What the hook does not run:**
+
+Type-checking (`npm run type:check`) and the full snapshot validation are not part of the pre-commit hook, since they operate on the whole project rather than on staged files; CI enforces them on every push.
 
 **Bypassing pre-commit hooks:**
 
@@ -418,6 +430,67 @@ SLAs are for the first substantive review. Trivial approvals (docs typo) may be 
 - Never import server-side variables in `'use client'` components
 - Add new variables to `.env.example` with a description comment
 
+### Constants and magic numbers
+
+- **Never inline a magic number or repeated string literal.** Define it as a named
+  constant instead.
+- Application-wide constants (timeouts, polling intervals, cache TTLs, Stellar
+  parameters) live in **`src/lib/constants.ts`**, which re-exports everything from
+  `src/lib/config/`. Import from there:
+  ```ts
+  import { BRIDGE_POLLING_INTERVAL_MS, CACHE_CURRENCY_TTL_MS } from '@/lib/constants';
+  ```
+- Fee percentages and basis-point values live in **`@stellar-spend/shared`**
+  (`packages/shared/src/fee-constants.ts`).
+- Per-route rate-limit configs live in **`src/lib/rateLimiter.ts`** (`RATE_LIMIT_REGISTRY`).
+- Currency, stablecoin, and corridor configs live in their respective files
+  (`currencies.ts`, `stablecoins.ts`, `corridor-config.ts`).
+- If you add a new global constant, add it to `src/lib/constants.ts` and add a
+  corresponding test in `src/lib/constants.test.ts`.
+
+### Error handling
+
+All error handling must follow these rules (enforced by ESLint — violations fail CI):
+
+- **No floating promises.** Every `async` call must be `await`ed or explicitly
+  discarded with `void`:
+
+  ```ts
+  // ❌ Floating — rejection is silently lost
+  fetchData();
+
+  // ✅ Awaited
+  await fetchData();
+
+  // ✅ Intentionally fire-and-forget
+  void fetchData();
+  ```
+
+  Rule: `@typescript-eslint/no-floating-promises: error`
+
+- **No empty catch blocks.** At minimum, log the error or rethrow it. If you
+  genuinely want to ignore an error, prefix the parameter with `_` and add a comment:
+
+  ```ts
+  // ❌ Swallowed — no trace of what went wrong
+  try { ... } catch (e) {}
+
+  // ✅ Logged
+  try { ... } catch (e) {
+    logger.warn('context', { error: e });
+  }
+
+  // ✅ Intentionally ignored (use sparingly)
+  try { ... } catch (_e) {
+    // Safe to ignore: optional cache warm-up — the main path continues without it
+  }
+  ```
+
+  Rule: `no-empty: ['error', { allowEmptyCatch: false }]`
+
+- **Use the shared `ErrorHandler`** for all API route errors. See
+  `docs/api/ERROR_RESPONSES.md` for the full reference.
+
 ### Formatting
 
 - **Prettier** is enforced; run `npm run format` to auto-fix
@@ -514,10 +587,10 @@ Stellar-Spend uses a two-tier dependency versioning strategy to balance security
 
 The following packages **must** use exact version strings (no `^` or `~`) in `package.json`:
 
-| Package | Reason |
-|---|---|
-| `react` | Major/minor bumps require coordinated changes; silent upgrades cause hydration mismatches |
-| `react-dom` | Must always match `react` exactly |
+| Package      | Reason                                                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `react`      | Major/minor bumps require coordinated changes; silent upgrades cause hydration mismatches                                 |
+| `react-dom`  | Must always match `react` exactly                                                                                         |
 | `typescript` | Compiler version is a build contract — drift between developer and CI compiler versions causes false-positive type errors |
 
 If you need to update a hard-pinned dependency, open a dedicated PR with a changelog entry explaining the reason and test coverage for any API changes.

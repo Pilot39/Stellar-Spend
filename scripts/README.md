@@ -4,17 +4,17 @@ This directory contains scripts used for development, testing, and production de
 
 ## Active Scripts
 
-### Development & Build
-
-- **run-next.cjs** - Next.js application launcher (used by: `npm run dev`, `npm run build`, `npm run start`)
-
 ### Code Quality
 
-- **audit-contracts.sh** - Audits Rust contracts (used by: `npm run audit:contracts`)
+- **audit-admin-auth.sh** - Audits admin authorization checks in Soroban contracts
+- **audit-api-routes.cjs** - Diffs route handlers under `src/app/api` against `openapi.yaml` to surface undocumented or stale entries (used by: `npm run routes:audit`)
+- **audit-contracts.sh** - Audits Rust contracts for vulnerabilities (used by: `npm run audit:contracts`)
+- **audit-database-schema.ts** - Identifies unused columns and indexes in the database schema (used by: `npm run db:audit`)
+- **audit-dead-code.sh** - Checks Soroban contracts for dead code warnings
+- **audit-events.sh** - Audits event emissions across Soroban contracts
 - **check-licenses.js** - Validates third-party license compliance (used by: `npm run license:check`, `npm run license:report`)
 - **check-orphaned-stories.js** - Finds unused Storybook stories (used by: `npm run storybook:check-orphans`, `npm run storybook:fix-orphans`)
-- **generate-openapi.cjs** - Generates OpenAPI specification from code (used by: `npm run openapi:generate`)
-- **validate-openapi.cjs** - Validates OpenAPI specification (used by: `npm run openapi:validate`)
+- **validate-snapshots.js** - Validates snapshot test files (used by: `npm run test:snapshots:validate`)
 - **verify-tsconfig.sh** - Validates TypeScript configuration
 
 ### CI/CD Deployment
@@ -24,10 +24,6 @@ This directory contains scripts used for development, testing, and production de
 - **canary-metrics-check.sh** - Monitors canary deployment health metrics
 - **check-diagrams.sh** - Validates architecture and process diagrams
 - **test-disaster-recovery.sh** - Tests disaster recovery procedures
-
-### Database & Migrations
-
-- **migrate.ts** - Database schema migration runner
 
 ### Performance Testing
 

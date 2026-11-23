@@ -16,8 +16,10 @@ dist
 # misc
 .DS_Store
 *.pem
-# Force-include synthetic gitleaks secret fixtures (Issue #1014) despite *.pem above
-!src/test/fixtures/secrets/private-key.pem
+# Generated secret fixtures (Issue #1336): created at test-time by generate-fixtures.ts
+src/test/fixtures/secrets/*.env
+src/test/fixtures/secrets/*.json
+src/test/fixtures/secrets/*.pem
 .env
 .env*.local
 
@@ -71,6 +73,13 @@ IMPLEMENTATION_*.md
 # PR description scratch files (use CHANGELOG.md / the PR body instead)
 PR_DESCRIPTION*.md
 
+# Stale completion/deliverable reports — keep content in CHANGELOG.md instead
+DELIVERABLES*.txt
+ACCEPTANCE_VERIFICATION*.md
+ERROR_HANDLER_AUDIT*.md
+*_COMPLETION_REPORT.md
+*_AUDIT.md
+
 *storybook.log
 storybook-static
 
@@ -86,3 +95,6 @@ scratch/
 *.scratch.md
 *.tmp.md
 task*.md
+
+# Husky generated hook wrappers
+.husky/_

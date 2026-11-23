@@ -2666,6 +2666,82 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/offramp/build-tx:
+    post:
+      tags:
+        - bridge
+      summary: Build bridge transaction
+      description: Builds the unsigned Stellar transaction XDR for the Allbridge transfer.
+      operationId: buildBridgeTx
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuildTxRequest'
+      responses:
+        '200':
+          description: Unsigned transaction XDR
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildTxResponse'
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/offramp/submit-soroban:
+    post:
+      tags:
+        - bridge
+      summary: Submit signed Soroban transaction
+      description: Submits a client-signed Stellar transaction to the network.
+      operationId: submitSoroban
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitSorobanRequest'
+      responses:
+        '200':
+          description: Submission result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TxStatusResponse'
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/offramp/execute-payout:
     post:
       tags:
@@ -2702,6 +2778,178 @@ paths:
                   txHash:
                     type: string
                     example: '0x1234567890abcdef'
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/offramp/currencies:
+    get:
+      tags:
+        - offramp
+      summary: List supported fiat currencies
+      description: Returns the fiat currencies supported for off-ramp payouts.
+      operationId: getCurrencies
+      responses:
+        '200':
+          description: Supported currencies
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - currencies
+                properties:
+                  currencies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Currency'
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/offramp/institutions:
+    get:
+      tags:
+        - offramp
+      summary: List payout institutions
+      description: Returns the banks/institutions available for a given fiat currency.
+      operationId: getInstitutions
+      parameters:
+        - name: currency
+          in: query
+          required: true
+          schema:
+            type: string
+          example: NGN
+      responses:
+        '200':
+          description: Supported institutions
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - institutions
+                properties:
+                  institutions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Institution'
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/offramp/rate:
+    get:
+      tags:
+        - offramp
+      summary: Get live spot rate
+      description: Returns the current spot FX conversion rate for a currency pair.
+      operationId: getSpotRate
+      parameters:
+        - name: currency
+          in: query
+          required: true
+          schema:
+            type: string
+          example: NGN
+      responses:
+        '200':
+          description: Spot rate
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - rate
+                  - pair
+                properties:
+                  rate:
+                    type: number
+                    example: 1598
+                  pair:
+                    type: string
+                    example: USDC/NGN
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/offramp/verify-account:
+    post:
+      tags:
+        - offramp
+      summary: Verify a payout account
+      description: Resolves the account holder name for a bank account before a payout is created.
+      operationId: verifyAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyAccountRequest'
+      responses:
+        '200':
+          description: Account resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyAccountResponse'
         '400':
           description: Bad Request — validation failed or missing parameter
           content:
@@ -2759,6 +3007,63 @@ paths:
                         chain:
                           type: string
                           example: STELLAR
+  /api/onramp/providers:
+    get:
+      tags:
+        - onramp
+      summary: List on-ramp providers
+      description: Returns the fiat on-ramp providers available for a currency.
+      operationId: listOnrampProviders
+      parameters:
+        - name: currency
+          in: query
+          schema:
+            type: string
+          example: NGN
+      responses:
+        '200':
+          description: Provider list
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - providers
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        currencies:
+                          type: array
+                          items:
+                            type: string
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/onramp/quote:
     post:
       tags:
@@ -2888,6 +3193,58 @@ paths:
                       accountName:
                         type: string
                         example: Paycrest Settlement
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/onramp/orders:
+    get:
+      tags:
+        - onramp
+      summary: List on-ramp orders
+      description: Returns the account's on-ramp orders, newest first.
+      operationId: listOnrampOrders
+      responses:
+        '200':
+          description: On-ramp order list
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - orders
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - orderId
+                        - status
+                      properties:
+                        orderId:
+                          type: string
+                        status:
+                          type: string
+                          enum:
+                            - pending_payment
+                            - processing
+                            - completed
+                            - failed
         '400':
           description: Bad Request — validation failed or missing parameter
           content:
@@ -3050,6 +3407,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/merchant/payout:
+    post:
+      tags:
+        - merchant
+      summary: Initiate single merchant payout
+      description: Triggers a single payout to one recipient bank account.
+      operationId: createSingleMerchantPayout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Recipient'
+      responses:
+        '200':
+          description: Payout created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - payoutId
+                  - status
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                    example: pending
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/merchant/payouts:
     get:
       tags:
@@ -3153,6 +3557,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/merchant/statistics:
+    get:
+      tags:
+        - merchant
+      summary: Merchant statistics (alias)
+      description: |
+        Alias of `/api/merchant/stats` retained for backwards compatibility.
+        Returns aggregated volume, completed orders, and fee metrics.
+      operationId: getMerchantStatistics
+      deprecated: true
+      responses:
+        '200':
+          description: Merchant statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - totalVolumeUsd
+                  - totalOrders
+                  - settledCount
+                properties:
+                  totalVolumeUsd:
+                    type: number
+                    example: 125000
+                  totalOrders:
+                    type: integer
+                    example: 450
+                  settledCount:
+                    type: integer
+                    example: 448
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/merchant/stats:
     get:
       tags:
@@ -3189,6 +3642,159 @@ paths:
                 $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/api-keys:
+    get:
+      tags:
+        - api-keys
+      summary: List API keys
+      description: Returns all programmatic API keys for the account (admin only). Key secrets are never returned.
+      operationId: listApiKeys
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: API key list
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - keys
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                        - scopes
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        scopes:
+                          type: array
+                          items:
+                            type: string
+                        createdAt:
+                          type: string
+                          format: date-time
+                        revokedAt:
+                          type: string
+                          format: date-time
+                          nullable: true
+        '401':
+          description: Unauthorized — invalid or missing admin credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - api-keys
+      summary: Create API key
+      description: Creates a new programmatic API key (admin only). The secret is returned exactly once.
+      operationId: createApiKey
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: CI pipeline
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - offramp:read
+                      - offramp:write
+                      - webhook:read
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                  - key
+                properties:
+                  id:
+                    type: string
+                  key:
+                    type: string
+                    description: The API key secret. Shown only once.
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing admin credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/api-keys/{id}:
+    delete:
+      tags:
+        - api-keys
+      summary: Revoke API key
+      description: Revokes an API key (admin only). Revocation is immediate and irreversible.
+      operationId: revokeApiKey
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Key revoked
+        '401':
+          description: Unauthorized — invalid or missing admin credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found — unknown key id
           content:
             application/json:
               schema:
@@ -3307,6 +3913,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/versions:
+    get:
+      tags:
+        - versions
+      summary: Discover supported API versions
+      description: |
+        Returns the list of API versions the server currently accepts, the
+        default version, and the sunset date for deprecated versions. Clients
+        can use this to negotiate a version at runtime instead of hard-coding
+        one. Public endpoint — no authentication required.
+      operationId: getApiVersions
+      security: []
+      responses:
+        '200':
+          description: Supported API versions
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - versions
+                  - default
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - version
+                        - status
+                      properties:
+                        version:
+                          type: string
+                          example: '1'
+                        status:
+                          type: string
+                          enum:
+                            - current
+                            - deprecated
+                          example: current
+                        sunset:
+                          type: string
+                          format: date
+                          description: Present only for deprecated versions
+                          example: '2026-01-01'
+                  default:
+                    type: string
+                    example: '1'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/transactions/analytics:
     get:
       tags:
@@ -3332,6 +3992,92 @@ paths:
                     type: number
                   averageSettlementSeconds:
                     type: number
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/transactions/analytics/summary:
+    get:
+      tags:
+        - transactions
+      summary: Transaction analytics summary
+      description: Lightweight summary of transaction analytics for dashboards.
+      operationId: getTransactionAnalytics
+      responses:
+        '200':
+          description: Analytics data
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - totalVolume
+                  - successRate
+                  - averageSettlementSeconds
+                properties:
+                  totalVolume:
+                    type: number
+                  successRate:
+                    type: number
+                  averageSettlementSeconds:
+                    type: number
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/transactions/export:
+    get:
+      tags:
+        - transactions
+      summary: Export transactions
+      description: Exports the account's transactions as CSV for accounting and reconciliation.
+      operationId: exportTransactions
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: CSV export
+          content:
+            text/csv:
+              schema:
+                type: string
         '400':
           description: Bad Request — validation failed or missing parameter
           content:
@@ -3395,6 +4141,104 @@ paths:
                 $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/transactions:
+    get:
+      tags:
+        - transactions
+      summary: List transactions
+      description: Returns the authenticated account's transactions, newest first.
+      operationId: listTransactions
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - transactions
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  nextCursor:
+                    type: string
+                    nullable: true
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/transactions/{id}:
+    get:
+      tags:
+        - transactions
+      summary: Get a single transaction
+      description: Returns one transaction by its identifier.
+      operationId: getTransaction
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found — unknown transaction id
           content:
             application/json:
               schema:
@@ -3488,6 +4332,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/webhooks/events:
+    get:
+      tags:
+        - webhooks
+      summary: List webhook event types
+      description: Returns the event types that can be subscribed to via webhooks.
+      operationId: listWebhookEvents
+      responses:
+        '200':
+          description: Event type list
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - events
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - type
+                        - description
+                      properties:
+                        type:
+                          type: string
+                          example: transaction.settled
+                        description:
+                          type: string
         '401':
           description: Unauthorized — invalid or missing credentials
           content:
@@ -3596,6 +4482,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/webhooks/paycrest:
+    post:
+      tags:
+        - webhooks
+      summary: Paycrest payout event webhook
+      description: |
+        Inbound webhook called by Paycrest when a payout order changes state.
+        The request is authenticated with an HMAC-SHA256 hex digest of the raw
+        request body, sent in the `X-Paycrest-Signature` header. Requests with a
+        missing or invalid signature are rejected with `401`.
+      operationId: receivePaycrestWebhook
+      security:
+        - PaycrestSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - event
+                - data
+              properties:
+                event:
+                  type: string
+                  description: Paycrest event type
+                  example: order.settled
+                data:
+                  type: object
+                  description: Event payload, shape depends on `event`
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Event accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - received
+                properties:
+                  received:
+                    type: boolean
+                    example: true
+        '400':
+          description: Bad Request — malformed payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — missing or invalid HMAC signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/webhooks/delivery-log:
     get:
       tags:
@@ -3617,6 +4565,220 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/WebhookDelivery'
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/offramp/currencies:
+    get:
+      tags:
+        - offramp
+      summary: List supported fiat currencies (v1)
+      description: Returns the fiat currencies supported for off-ramp payouts under the versioned /v1/ route.
+      operationId: getCurrenciesV1
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Supported currencies
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - currencies
+                properties:
+                  currencies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Currency'
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/offramp/institutions:
+    get:
+      tags:
+        - offramp
+      summary: List payout institutions (v1)
+      description: Returns the banks/institutions available for a given fiat currency under the versioned /v1/ route.
+      operationId: getInstitutionsV1
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: currency
+          in: query
+          required: true
+          schema:
+            type: string
+          example: NGN
+      responses:
+        '200':
+          description: Supported institutions
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - institutions
+                properties:
+                  institutions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Institution'
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/offramp/verify-account:
+    post:
+      tags:
+        - offramp
+      summary: Verify a payout account (v1)
+      description: Resolves the account holder name for a bank account before a payout is created.
+      operationId: verifyAccountV1
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyAccountRequest'
+      responses:
+        '200':
+          description: Account resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyAccountResponse'
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/offramp/build-tx:
+    post:
+      tags:
+        - bridge
+      summary: Build bridge transaction (v1)
+      description: Builds the unsigned Stellar transaction XDR for the Allbridge transfer.
+      operationId: buildTxV1
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuildTxRequest'
+      responses:
+        '200':
+          description: Unsigned transaction XDR
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildTxResponse'
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/offramp/submit-soroban:
+    post:
+      tags:
+        - bridge
+      summary: Submit signed Soroban transaction (v1)
+      description: Submits a client-signed Stellar transaction to the network.
+      operationId: submitSorobanV1
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitSorobanRequest'
+      responses:
+        '200':
+          description: Submission result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TxStatusResponse'
         '400':
           description: Bad Request — validation failed or missing parameter
           content:
@@ -3705,6 +4867,48 @@ paths:
                 properties:
                   syncedCount:
                     type: integer
+        '400':
+          description: Bad Request — validation failed or missing parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized — invalid or missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/sync/transactions:
+    get:
+      tags:
+        - sync
+      summary: Retrieve synced transactions (v1)
+      description: Versioned alias of `/api/v1/sync/history` for client transaction backup.
+      operationId: getSyncTransactionsV1
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Synced transaction history
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - transactions
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
         '400':
           description: Bad Request — validation failed or missing parameter
           content:

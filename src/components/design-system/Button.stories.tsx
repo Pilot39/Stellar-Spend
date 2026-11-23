@@ -61,6 +61,13 @@ export const Small: Story = {
   },
 };
 
+export const Medium: Story = {
+  args: {
+    size: 'md',
+    children: 'Medium Button',
+  },
+};
+
 export const Large: Story = {
   args: {
     size: 'lg',

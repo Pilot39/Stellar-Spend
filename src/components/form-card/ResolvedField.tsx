@@ -8,21 +8,29 @@ export interface ResolvedFieldProps {
   placeholder?: string;
 }
 
-export function ResolvedField({
-  label,
-  value,
-  loading,
-  placeholder = '—',
-}: ResolvedFieldProps) {
+export function ResolvedField({ label, value, loading, placeholder = '—' }: ResolvedFieldProps) {
+  const isResolved = Boolean(value) && !loading;
+  const statusText = loading ? 'Resolving...' : value ? value : placeholder;
+
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[10px] tracking-[0.18em] text-[#777777] uppercase">{label}</span>
+      <span
+        id="resolved-field-label"
+        className="text-[10px] tracking-[0.18em] text-[#777777] uppercase"
+      >
+        {label}
+      </span>
       <div
+        role="status"
+        aria-live="polite"
+        aria-busy={loading ? true : undefined}
+        aria-labelledby="resolved-field-label"
+        aria-label={`${label}: ${statusText}`}
         className={cn(
           'bg-[#0a0a0a] border px-3 py-2.5 text-sm min-h-[42px] flex items-center justify-between',
-          value && !loading ? 'border-green-500/40' : 'border-[#333333]',
+          isResolved ? 'border-green-500/40' : 'border-[#333333]',
         )}
-        data-testid={value && !loading ? 'resolved-account-name' : undefined}
+        data-testid={isResolved ? 'resolved-account-name' : undefined}
       >
         <span>
           {loading ? (
@@ -33,8 +41,13 @@ export function ResolvedField({
             <span className="text-[#444444]">{placeholder}</span>
           )}
         </span>
-        {value && !loading && (
-          <Icon name="check-circle" size={14} className="text-green-400 shrink-0" />
+        {isResolved && (
+          <Icon
+            name="check-circle"
+            size={14}
+            className="text-green-400 shrink-0"
+            aria-hidden="true"
+          />
         )}
       </div>
     </div>

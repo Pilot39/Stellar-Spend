@@ -1,3 +1,4 @@
+import { randomHex } from '@/lib/crypto/ids';
 /**
  * Transaction splitting — split a single USDC amount across multiple beneficiaries.
  * All amounts are in USDC (string decimals). Percentages must sum to 100.
@@ -20,7 +21,7 @@ export interface SplitReconciliation {
   recipientBreakdown: Record<string, { expected: number; executed: number; variance: number }>;
 }
 
-export interface SplitAnalytics {
+interface SplitAnalytics {
   totalSplits: number;
   completedSplits: number;
   partialSplits: number;
@@ -128,7 +129,7 @@ export class SplitStorage {
   }
 
   static generateId(): string {
-    return `split_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    return `split_${Date.now()}_${randomHex(4)}`;
   }
 
   static getById(splitId: string): SplitTransaction | undefined {
@@ -178,7 +179,7 @@ export function calculateSplitFees(totalAmount: string, recipientCount: number):
 // Execution
 // ---------------------------------------------------------------------------
 
-export async function executeSplit(
+async function executeSplit(
   splitId: string,
   executeRecipient: (recipientId: string, amount: string) => Promise<void>,
 ): Promise<SplitTransaction> {

@@ -2,6 +2,8 @@
 -- Stores API idempotency records for safe retries.
 -- Idempotent: safe to run multiple times.
 
+-- up
+
 CREATE TABLE IF NOT EXISTS idempotency_keys (
   idempotency_key TEXT NOT NULL,
   method          TEXT NOT NULL,
@@ -24,3 +26,8 @@ CREATE INDEX IF NOT EXISTS idx_idempotency_keys_expires_at
 
 CREATE INDEX IF NOT EXISTS idx_idempotency_keys_status_locked_until
   ON idempotency_keys (status, locked_until);
+
+-- down
+
+-- Dropping the table also drops its indexes (#1460)
+DROP TABLE IF EXISTS idempotency_keys;

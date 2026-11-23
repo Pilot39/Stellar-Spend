@@ -3,6 +3,7 @@ import { ErrorHandler } from '@/lib/error-handler';
 import { merchantService, type BulkPayoutItem } from '@/lib/services';
 import { createBulkPayoutSchema, formatZodErrors } from '@/lib/validators';
 import { ApiError, ErrorType } from '@/lib/error-types';
+import { parsePageQuery } from '@/lib/pagination';
 
 // GET /api/merchant/payouts?merchantId=&page=&limit=
 export async function GET(request: NextRequest) {
@@ -12,8 +13,7 @@ export async function GET(request: NextRequest) {
     return ErrorHandler.validation('merchantId is required');
   }
 
-  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
-  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '20', 10)));
+  const { page, limit } = parsePageQuery(searchParams, { defaultLimit: 20, maxLimit: 100 });
 
   try {
     const result = await merchantService.getMerchantPayouts(merchantId, page, limit);
@@ -41,6 +41,12 @@ export async function POST(request: NextRequest) {
   }
 
   const { merchantId, idempotencyKey, items } = parsed.data;
+
+  // A header that disagrees with the body would make a retry look like a new payout (#1462).
+  const headerKey = request.headers.get('idempotency-key');
+  if (headerKey && headerKey !== idempotencyKey) {
+    return ErrorHandler.validation('Idempotency-Key header must match idempotencyKey in the body');
+  }
 
   try {
     const payout = await merchantService.createBulkPayout(
